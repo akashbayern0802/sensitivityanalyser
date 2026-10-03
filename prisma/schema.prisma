@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id             String   @id @default(cuid())
+  name           String
+  email          String?  @unique
+  linkedinUrl    String?
+  interests      String   @default("[]")  // JSON array
+  targetRole     String?
+  targetLocation String?
+  llmProvider    String   @default("gemini")
+  llmModel       String   @default("gemini-2.5-flash")
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  profile         Profile?
+  weeklyPlans     WeeklyPlan[]
+  contentDrafts   ContentDraft[]
+  analyticsSnapshots AnalyticsSnapshot[]
+  commentLogs     CommentLog[]
+}
+
+model Profile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  headline          String?
+  about             String?
+  skills            String   @default("[]")  // JSON array
+  positions         String   @default("[]")  // JSON array
+  education         String   @default("[]")  // JSON array
+  recommendations   String   @default("[]")  // JSON array
+  completenessScore Float    @default(0)
+  lastUpdated       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model WeeklyPlan {
+  id             String   @id @default(cuid())
+  userId         String
+  weekStart      DateTime
+  status         String   @default("draft")  // draft, accepted, completed
+  planData       String   @default("{}")     // JSON WeeklyPlanSchema
+  completionRate Float    @default(0)
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plannedItems PlannedItem[]
+}
+
+model PlannedItem {
+  id             String   @id @default(cuid())
+  planId         String
+  day            String
+  time           String
+  type           String   // post, comment, engagement
+  topic          String
+  format         String?  // story, listicle, hot_take, etc.
+  status         String   @default("pending")  // pending, created, published, skipped
+  contentDraftId String?
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  plan         WeeklyPlan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  contentDraft ContentDraft? @relation(fields: [contentDraftId], references: [id])
+}
+
+model ContentDraft {
+  id           String   @id @default(cuid())
+  userId       String
+  title        String?
+  body         String
+  hashtags     String   @default("[]")  // JSON array
+  imagePrompt  String?
+  imageUrl     String?
+  format       String   @default("text")  // text, carousel, poll, image
+  status       String   @default("draft")  // draft, ready, published
+  qualityScore Float?
+  publishedAt  DateTime?
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plannedItems PlannedItem[]
+}
+
+model Influencer {
+  id             String   @id @default(cuid())
+  name           String
+  linkedinUrl    String   @unique
+  headline       String?
+  followerCount  Int      @default(0)
+  interests      String   @default("[]")  // JSON array
+  relevanceScore Float    @default(0)
+  lastScanned    DateTime @default(now())
+  isSaved        Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  
+  // CRM Tracking Fields
+  companyName    String?
+  status         String   @default("inbox") // inbox, cold, engaged, connected
+  lastEngagedAt  DateTime?
+
+  posts          InfluencerPost[]
+  engagementLogs EngagementLog[]
+}
+
+model InfluencerPost {
+  id                String   @id @default(cuid())
+  influencerId      String
+  postText          String
+  postUrl           String?
+  likes             Int      @default(0)
+  comments          Int      @default(0)
+  shares            Int      @default(0)
+  postedAt          DateTime?
+  suggestedComments String   @default("[]")  // JSON array
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  influencer  Influencer   @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+  commentLogs CommentLog[]
+}
+
+model AnalyticsSnapshot {
+  id                  String   @id @default(cuid())
+  userId              String
+  weekStart           DateTime
+  impressions         Int      @default(0)
+  profileViews        Int      @default(0)
+  searchAppearances   Int      @default(0)
+  followerCount       Int      @default(0)
+  ssiScore            Float    @default(0)
+  connectionsReceived Int      @default(0)
+  visibilityScore     Float    @default(0)
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CommentLog {
+  id                String   @id @default(cuid())
+  userId            String
+  influencerPostId  String
+  commentText       String
+  commentedAt       DateTime @default(now())
+  repliesReceived   Int      @default(0)
+
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  influencerPost InfluencerPost @relation(fields: [influencerPostId], references: [id], onDelete: Cascade)
+}
+
+model TrackedTarget {
+  id          String   @id @default(cuid())
+  type        String   // 'rss' | 'github'
+  name        String   // Display name e.g. 'Gergely Orosz'
+  url         String   @unique // RSS feed URL or GitHub repo URL
+  niche       String   // e.g. 'Agentic AI'
+  avatarUrl   String?  // optional avatar/logo URL
+  isActive    Boolean  @default(true)
+  lastScanned DateTime?
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  radarEvents RadarEvent[]
+}
+
+model RadarEvent {
+  id              String   @id @default(cuid())
+  targetId        String
+  title           String
+  url             String
+  summary         String?  // brief snippet/description
+  publishedAt     DateTime?
+  type            String   // 'article' | 'pr' | 'release' | 'commit'
+  extractedText   String?  // Full text after Bright Data extraction
+  linkedinDraft   String?  // AI-generated LinkedIn post
+  commentDraft    String?  // AI-generated comment
+  status          String   @default("new") // new | extracted | drafted | published
+  isSaved Boolean @default(false)
+  createdAt DateTime @default(now())
+
+  target TrackedTarget @relation(fields: [targetId], references: [id], onDelete: Cascade)
+}
+
+
+model EngagementLog {
+  id           String   @id @default(cuid())
+  influencerId String
+  actionType   String   // "comment", "dm", "connection_request"
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  influencer   Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
+}
+

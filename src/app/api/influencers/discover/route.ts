@@ -208,7 +208,7 @@ export async function POST(req: Request) {
 
         saved.push({ ...record, whyFollow: inf.whyFollow });
       } catch (e: any) {
-        console.warn(`Skipping ${inf.name}:`, e.message); throw new Error(e.message);
+        console.warn(`Skipping ${inf.name}:`, e.message); return NextResponse.json({ success: false, error: "Prisma Error: " + e.message });
       }
     }
 
@@ -218,4 +218,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
 

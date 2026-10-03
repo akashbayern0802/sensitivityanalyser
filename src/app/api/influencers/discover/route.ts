@@ -196,12 +196,12 @@ export async function POST(req: Request) {
       try {
         const record = await prisma.influencer.upsert({
           where: { linkedinUrl },
-          update: { headline: inf.headline ?? '', relevanceScore: 0.9, companyName: companyName || undefined },
+          update: { headline: inf.headline ?? '', relevanceScore: 0.9, companyName: companyName || "" },
           create: {
             name: inf.name.trim(),
             linkedinUrl,
             headline: inf.headline ?? '',
-            companyName: companyName || undefined,
+            companyName: companyName || "",
             interests: JSON.stringify(inf.topics ?? [query]),
             relevanceScore: 0.9,
           },
@@ -219,6 +219,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
 
 
 

@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import prisma from '@/lib/db';
@@ -208,7 +209,7 @@ export async function POST(req: Request) {
 
         saved.push({ ...record, whyFollow: inf.whyFollow });
       } catch (e: any) {
-        console.warn(`Skipping ${inf.name}:`, e.message); return NextResponse.json({ success: false, error: "Prisma Error: " + e.message });
+        console.error(`Prisma Error on ${inf.name}:`, e); return NextResponse.json({ success: false, error: "Prisma Error: " + e.message });
       }
     }
 
@@ -218,5 +219,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
 }
+
 
 

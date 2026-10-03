@@ -110,6 +110,7 @@ model Influencer {
   // CRM Tracking Fields
   companyName    String?
   status         String   @default("inbox") // inbox, cold, engaged, connected
+    source         String   @default("manual") // manual | auto (added by daily autonomous discovery)
   lastEngagedAt  DateTime?
 
   posts          InfluencerPost[]

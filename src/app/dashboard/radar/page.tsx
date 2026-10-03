@@ -72,7 +72,8 @@ export default function RadarPage() {
       const res = await fetch('/api/radar/company-news', { method: 'POST' });
       const data = await res.json();
       if (data.success) {
-        setCompanyNewsMessage(`✓ Scanned ${data.scanned} companies. Found ${data.newEvents} new articles.`);
+        const added = (data.autoDiscovered ?? []).reduce((n: number, d: { added: string[] }) => n + d.added.length, 0);
+        setCompanyNewsMessage(`Scanned ${data.scanned} companies. Found ${data.newEvents} new articles.` + (added > 0 ? ` Major news detected: ${added} new contacts added to your CRM Inbox.` : '));
         setLastScanTime(new Date().toLocaleTimeString());
         loadCompanyNews();
       } else {

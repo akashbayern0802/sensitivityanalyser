@@ -33,6 +33,7 @@ interface Influencer {
   companyName?: string;
   status?: 'inbox' | 'cold' | 'engaged' | 'connected';
   lastEngagedAt?: string;
+  source?: string;
 }
 
 const NICHE_CHIPS = [
@@ -747,7 +748,12 @@ export default function InfluencersPage() {
                                   {inf.name.charAt(0)}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <h4 className="font-semibold text-sm text-gray-900 truncate">{inf.name}</h4>
+                                  <div className="flex items-center gap-2">
+                                    <h4 className="font-semibold text-sm text-gray-900 truncate">{inf.name}</h4>
+                                    {inf.source === 'auto' && (
+                                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wide">Auto</span>
+                                    )}
+                                  </div>
                                   <div className="mt-1 flex items-center gap-1.5">
                                     <Building2 className="w-3 h-3 text-gray-400 shrink-0" />
                                     <input

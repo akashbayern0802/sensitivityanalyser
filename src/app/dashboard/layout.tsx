@@ -33,8 +33,31 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const [currentProvider, setCurrentProvider] = useState('openai');
   const pathname = usePathname();
+
+  // Handle window resizing
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile(); // Check on mount
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Auto-collapse sidebar on mobile, auto-expand on desktop
+  useEffect(() => {
+    setCollapsed(isMobile);
+  }, [isMobile]);
+
+  // Collapse sidebar when route changes on mobile
+  useEffect(() => {
+    if (isMobile && !collapsed) {
+      setCollapsed(true);
+    }
+  }, [pathname]); // we omit isMobile/collapsed intentionally here to avoid loop, or we can just let it be.
 
   useEffect(() => {
     // Read provider on mount
@@ -60,10 +83,18 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
+      {/* Mobile Sidebar Overlay */}
+      {!collapsed && isMobile && (
+        <div 
+          className="fixed inset-0 bg-gray-900/50 z-20 md:hidden" 
+          onClick={() => setCollapsed(true)}
+        />
+      )}
+
       {/* Sidebar */}
       <div 
-        className={`flex flex-col bg-gray-900 text-white transition-all duration-300 z-20 relative ${
-          collapsed ? 'w-20' : 'w-64'
+        className={`flex flex-col bg-gray-900 text-white transition-all duration-300 z-30 fixed md:relative h-full ${
+          collapsed ? '-translate-x-full md:translate-x-0 md:w-20' : 'translate-x-0 w-64'
         }`}
       >
         {/* Sidebar Header */}

@@ -270,7 +270,7 @@ export default function RadarPage() {
           <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border border-indigo-100">
             <h2 className="text-base font-semibold text-gray-900 mb-1">Auto-Discover Thought Leaders</h2>
             <p className="text-sm text-gray-500 mb-4">Enter a niche and the AI will find the top RSS feeds and GitHub repos to monitor — globally or filtered by region.</p>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <input
                 type="text"
                 value={niche}

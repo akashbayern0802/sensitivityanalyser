@@ -16,7 +16,7 @@ interface ImportResult {
 }
 
 interface LinkedInImportProps {
-  onImportSuccess: (result: { name?: string; headline?: string; location?: string; skills?: string[] }) => void;
+  onImportSuccess: (result: { name?: string; headline?: string; location?: string; linkedinUrl?: string; skills?: string[] }) => void;
 }
 
 function LinkedInImport({ onImportSuccess }: LinkedInImportProps) {
@@ -65,6 +65,7 @@ function LinkedInImport({ onImportSuccess }: LinkedInImportProps) {
         name: data.extracted.name || undefined,
         headline: data.extracted.headline || undefined,
         location: data.extracted.location || undefined,
+        linkedinUrl: data.extracted.linkedinUrl || undefined,
         skills: data.extracted.skills || [],
       });
     } catch (err: any) {
@@ -938,11 +939,12 @@ export default function SettingsPage() {
             <li>Drop those CSV files below</li>
           </ol>
           <LinkedInImport
-            onImportSuccess={({ name: n, headline, location: loc, skills: sk }) => {
+            onImportSuccess={({ name: n, headline, location: loc, skills: sk, linkedinUrl: lUrl }) => {
               if (n) setName(n);
               if (headline) setTargetRole(headline);
               if (loc) setLocation(loc);
               if (sk && sk.length) setImportedSkills(sk);
+              if (lUrl) setLinkedinUrl(lUrl);
             }}
           />
         </div>

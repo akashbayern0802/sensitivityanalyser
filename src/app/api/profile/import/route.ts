@@ -7,7 +7,13 @@ const MOCK_USER_ID = 'user_mock_id';
 // LinkedIn exports vary slightly by region/account type, so we check multiple column name variants.
 
 function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+  // Strip BOM if present
+  let cleanText = text;
+  if (cleanText.charCodeAt(0) === 0xFEFF) {
+    cleanText = cleanText.slice(1);
+  }
+  
+  const lines = cleanText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   if (lines.length < 2) return [];
 
   // LinkedIn CSVs sometimes have a note/disclaimer on the first few lines before the header
@@ -19,7 +25,7 @@ function parseCSV(text: string): Record<string, string>[] {
     if (commas > maxCommas) { maxCommas = commas; headerIdx = i; }
   }
 
-  const headers = parseCSVLine(lines[headerIdx]).map((h) => h.trim().replace(/^"|"$/g, ''));
+  const headers = parseCSVLine(lines[headerIdx]).map((h) => h.trim().replace(/^"|"$/g, '').trim());
   const rows: Record<string, string>[] = [];
 
   for (let i = headerIdx + 1; i < lines.length; i++) {
@@ -58,8 +64,15 @@ function parseCSVLine(line: string): string[] {
 
 // Get the first non-empty value by checking multiple possible column names
 function pick(row: Record<string, string>, ...keys: string[]): string {
+  // Normalize row keys for robust matching (lowercase, no spaces)
+  const normalizedRow: Record<string, string> = {};
+  for (const k in row) {
+    normalizedRow[k.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[k];
+  }
+
   for (const key of keys) {
-    const val = row[key]?.trim();
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const val = normalizedRow[normalizedKey]?.trim();
     if (val) return val;
   }
   return '';
@@ -68,8 +81,11 @@ function pick(row: Record<string, string>, ...keys: string[]): string {
 function parseProfile(rows: Record<string, string>[]) {
   if (!rows.length) return null;
   const r = rows[0]; // Profile.csv has one data row
+  const firstName = pick(r, 'First Name', 'FirstName');
+  const lastName = pick(r, 'Last Name', 'LastName');
+  
   return {
-    name: pick(r, 'First Name', 'FirstName') + ' ' + pick(r, 'Last Name', 'LastName'),
+    name: `${firstName} ${lastName}`.trim(),
     headline: pick(r, 'Headline', 'headline'),
     linkedinUrl: pick(r, 'Public Profile Url', 'LinkedIn Url', 'ProfileUrl'),
     summary: pick(r, 'Summary', 'About', 'summary'),
@@ -94,13 +110,20 @@ function parsePositions(rows: Record<string, string>[]) {
 function parseSkills(rows: Record<string, string>[]) {
   if (!rows.length) return [];
 
-  // LinkedIn Skills.csv has NO header — first line is already a skill.
+  // LinkedIn Skills.csv has NO header ?" first line is already a skill.
   // parseCSV() treats the first line as headers, so rows have keys like
   // { "Artificial Intelligence (AI)": "" }. Detect this by checking if
   // any row has a recognised key; if not, treat all keys as the skills.
   const knownKeys = ['Name', 'Skill', 'SkillName', 'name'];
   const firstRow = rows[0];
-  const hasKnownHeader = knownKeys.some(k => k in firstRow);
+  
+  // Normalize keys for checking
+  const normalizedFirstRow: Record<string, string> = {};
+  for (const k in firstRow) {
+    normalizedFirstRow[k.toLowerCase().replace(/[^a-z0-9]/g, '')] = firstRow[k];
+  }
+  
+  const hasKnownHeader = knownKeys.some(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') in normalizedFirstRow);
 
   if (hasKnownHeader) {
     // Standard format with a header row
@@ -109,13 +132,13 @@ function parseSkills(rows: Record<string, string>[]) {
       .filter(Boolean)
       .slice(0, 30);
   } else {
-    // Headerless format — every row key IS the skill value
+    // Headerless format ?" every row key IS the skill value
     const skills: string[] = [];
     // Collect the "header" row key (the first skill)
     for (const key of Object.keys(firstRow)) {
       if (key.trim()) skills.push(key.trim());
     }
-    // Collect remaining rows — their keys are also skill values
+    // Collect remaining rows ?" their keys are also skill values
     for (const row of rows) {
       for (const key of Object.keys(row)) {
         if (key.trim() && !skills.includes(key.trim())) skills.push(key.trim());
@@ -216,6 +239,8 @@ export async function POST(req: Request) {
         name: userUpdate.name || null,
         headline: userUpdate.targetRole || null,
         location: userUpdate.targetLocation || null,
+        linkedinUrl: userUpdate.linkedinUrl || null,
+        skills: skills,
         skillCount: skills.length,
         positionCount: positions.length,
         educationCount: education.length,

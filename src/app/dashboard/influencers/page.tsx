@@ -115,7 +115,7 @@ function CommentDrawer({
   onClose: () => void;
 }) {
   const [postText, setPostText] = useState('');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [suggestions, setSuggestions] = useState<{ type: string; label: string; text: string }[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [error, setError] = useState('');
@@ -250,10 +250,19 @@ function CommentDrawer({
                   </span>
                 )}
               </div>
-              {suggestions.map((comment, idx) => (
-                <div key={idx} className="p-4 rounded-xl bg-gray-50 border border-gray-100 relative">
-                  <p className="text-gray-700 text-sm pr-10 leading-relaxed">{comment}</p>
-                  <button onClick={() => copy(comment, idx)}
+              {suggestions.map((suggestion, idx) => (
+                <div key={idx} className="p-4 rounded-xl bg-gray-50 border border-gray-100 relative space-y-2">
+                  <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    suggestion.type === 'contrarian'
+                      ? 'bg-amber-100 text-amber-800'
+                      : suggestion.type === 'additive'
+                      ? 'bg-indigo-100 text-indigo-800'
+                      : 'bg-green-100 text-green-800'
+                  }`}>
+                    {suggestion.label}
+                  </span>
+                  <p className="text-gray-700 text-sm pr-10 leading-relaxed">{suggestion.text}</p>
+                  <button onClick={() => copy(suggestion.text, idx)}
                     className="absolute right-3 top-3 p-1.5 text-gray-400 hover:text-indigo-600 rounded-lg transition-colors">
                     {copiedIndex === idx ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                   </button>
@@ -725,9 +734,9 @@ export default function InfluencersPage() {
               <>
                 {/* --- PIPELINE VIEW --- */}
                 {crmView === 'pipeline' && (
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 overflow-x-auto pb-4">
+                  <div className="flex overflow-x-auto md:grid md:grid-cols-4 gap-4 pb-4 snap-x snap-mandatory hide-scrollbar">
                     {['inbox', 'cold', 'engaged', 'connected'].map(col => (
-                      <div key={col} className="bg-gray-50 rounded-xl p-3 min-w-[280px]">
+                      <div key={col} className="bg-gray-50 rounded-xl p-3 min-w-[300px] md:min-w-0 snap-center shrink-0">
                         <div className="flex items-center justify-between mb-3 px-1">
                           <h3 className="font-semibold text-sm text-gray-700 capitalize flex items-center gap-2">
                             {col === 'inbox' && <div className="w-2 h-2 rounded-full bg-gray-400" />}

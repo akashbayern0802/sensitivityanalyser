@@ -36,23 +36,42 @@ At least one of your 3 comments MUST reference this news naturally and specifica
     const prompt = `A top influencer in your industry just posted this on LinkedIn:
 "${postText}"
 
-Your Role: ${userRole}
+Your Professional Role: ${userRole}
 Your Areas of Expertise: ${userInterests.length > 0 ? userInterests.join(', ') : 'General industry trends'}${companyNewsContext}
 
-Generate 3 distinct, insightful comments you could leave on this post. Each comment should subtly reflect your expertise and role.
-Constraints:
-- Write like a real human (casual, authentic, conversational).
-- Avoid robotic praise like "Great post!" or "I completely agree." Add actual value, a respectful contrarian take, or a thoughtful question.
-- Include 1 relevant emoji in each comment.
-- Keep them punchy and under 3 sentences.
-- Format output as exactly 3 bullet points starting with "- ".`;
+Generate exactly 3 deeply insightful comments for this post, each from a different strategic archetype. These are for LinkedIn 360 Brew optimisation — the algorithm rewards substantial, expertise-driven engagement over generic praise.
+
+ARCHETYPE 1 - THE CONTRARIAN:
+A polite but confident comment that respectfully challenges ONE specific assumption or premise in the post. Do NOT disagree for the sake of it — pick a genuine nuance. Start with your point of disagreement, not with praise. 2-3 sentences.
+
+ARCHETYPE 2 - THE ADDITIVE INSIGHT:
+A comment that adds a brand new data point, framework, or perspective that the original post missed. Draw directly from the expertise in "${userRole}" and "${userInterests.join(', ')}". Make it specific, not generic. 2-3 sentences.
+
+ARCHETYPE 3 - THE EXPERIENCE SHARE:
+A short personal anecdote validating the post's core message using your own experience. Start with "In my experience..." or "When I was working on...". 2-3 sentences.
+
+Constraints for ALL comments:
+- Write like a real, senior professional. Zero corporate jargon.
+- Include exactly 1 relevant emoji per comment.
+- Each comment must stand alone as a complete thought.
+- Do NOT start any comment with "Great post" or generic praise.
+
+Format output as EXACTLY this structure with no other text:
+CONTRARIAN: [comment text]
+ADDITIVE: [comment text]
+EXPERIENCE: [comment text]`;
 
     const { text } = await generateText({ model, prompt });
 
-    const suggestions = text
-      .split('\n')
-      .filter(line => line.trim().startsWith('-'))
-      .map(line => line.replace(/^-\s*/, '').trim());
+    const contrarian = text.match(/CONTRARIAN:\s*(.+?)(?=\nADDITIVE:|$)/s)?.[1]?.trim() || '';
+    const additive = text.match(/ADDITIVE:\s*(.+?)(?=\nEXPERIENCE:|$)/s)?.[1]?.trim() || '';
+    const experience = text.match(/EXPERIENCE:\s*(.+?)$/s)?.[1]?.trim() || '';
+
+    const suggestions = [
+      { type: 'contrarian', label: '🤔 Contrarian Take', text: contrarian },
+      { type: 'additive', label: '💡 Additive Insight', text: additive },
+      { type: 'experience', label: '📖 Experience Share', text: experience },
+    ].filter(s => s.text.length > 0);
 
     return NextResponse.json({
       success: true,

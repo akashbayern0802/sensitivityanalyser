@@ -17,12 +17,13 @@ function parseCSV(text: string): Record<string, string>[] {
   if (lines.length < 2) return [];
 
   // LinkedIn CSVs sometimes have a note/disclaimer on the first few lines before the header
-  // Find the actual header row (the one with the most commas)
+  // Find the actual header row (the one with the most columns)
   let headerIdx = 0;
-  let maxCommas = 0;
+  let maxCols = 0;
   for (let i = 0; i < Math.min(5, lines.length); i++) {
-    const commas = (lines[i].match(/,/g) || []).length;
-    if (commas > maxCommas) { maxCommas = commas; headerIdx = i; }
+    if (!lines[i].trim()) continue;
+    const cols = parseCSVLine(lines[i]).length;
+    if (cols > maxCols) { maxCols = cols; headerIdx = i; }
   }
 
   const headers = parseCSVLine(lines[headerIdx]).map((h) => h.trim().replace(/^"|"$/g, '').trim());

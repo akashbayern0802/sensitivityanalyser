@@ -63,9 +63,9 @@ EXPERIENCE: [comment text]`;
 
     const { text } = await generateText({ model, prompt });
 
-    const contrarian = text.match(/CONTRARIAN:\s*(.+?)(?=\nADDITIVE:|$)/s)?.[1]?.trim() || '';
-    const additive = text.match(/ADDITIVE:\s*(.+?)(?=\nEXPERIENCE:|$)/s)?.[1]?.trim() || '';
-    const experience = text.match(/EXPERIENCE:\s*(.+?)$/s)?.[1]?.trim() || '';
+    const contrarian = text.match(/CONTRARIAN:\s*([\s\S]+?)(?=\nADDITIVE:|$)/)?.[1]?.trim() || '';
+    const additive = text.match(/ADDITIVE:\s*([\s\S]+?)(?=\nEXPERIENCE:|$)/)?.[1]?.trim() || '';
+    const experience = text.match(/EXPERIENCE:\s*([\s\S]+?)$/)?.[1]?.trim() || '';
 
     const suggestions = [
       { type: 'contrarian', label: '🤔 Contrarian Take', text: contrarian },

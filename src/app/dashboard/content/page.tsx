@@ -1,6 +1,5 @@
 'use client';
 
-import type { CarouselSlide } from '@/lib/carouselParser';
 import { Suspense, useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate } from 'lucide-react';
@@ -35,7 +34,7 @@ function ContentStudioContent() {
   const [isCheckingAlignment, setIsCheckingAlignment] = useState(false);
 
   // Carousel State
-  const [carouselSlides, setCarouselSlides] = useState<CarouselSlide[]>([]);
+  const [carouselSlides, setCarouselSlides] = useState<Array<{id:number;title:string;body:string;isTitle?:boolean;isCta?:boolean}>>([]);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
   const slideRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -165,16 +164,6 @@ function ContentStudioContent() {
       const data = await response.json();
       setPostBody(data.draft?.body || data.content || '');
       setImagePrompt(data.draft?.imagePrompt || data.imagePrompt || '');
-
-      // Parse carousel slides if format is carousel
-      if (format.toLowerCase().includes('carousel') || format.toLowerCase().includes('slide')) {
-        const { parseCarouselText } = await import('@/lib/carouselParser');
-        const slides = parseCarouselText(data.draft?.body || '');
-        setCarouselSlides(slides);
-      } else {
-        setCarouselSlides([]);
-      }
-
       setActiveTab('editor');
     } catch (err: any) {
       setError(err.message || 'An error occurred during generation');
@@ -182,6 +171,16 @@ function ContentStudioContent() {
       setIsGenerating(false);
     }
   };
+
+  useEffect(() => {
+    if (format.toLowerCase().includes('carousel') || format.toLowerCase().includes('slide') || postBody.includes('Slide 1')) {
+      import('@/lib/carouselParser').then(({ parseCarouselText }) => {
+        setCarouselSlides(parseCarouselText(postBody));
+      });
+    } else {
+      setCarouselSlides([]);
+    }
+  }, [postBody, format]);
 
   const handleCheckAlignment = async () => {
     if (!postBody.trim()) return;
@@ -280,121 +279,73 @@ function ContentStudioContent() {
         <div className="p-6 md:p-8">
           {activeTab === 'generator' && (
             <div className="max-w-2xl mx-auto space-y-6">
-
-              {/* Generator Mode Toggle — Feature 2 */}
-              <div className="flex rounded-lg border border-gray-200 p-1 bg-gray-50">
-                <button
-                  onClick={() => { setGeneratorMode('topic'); setError(''); }}
-                  className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                    generatorMode === 'topic' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  ✏️ Generate from Topic
-                </button>
-                <button
-                  onClick={() => { setGeneratorMode('url'); setError(''); }}
-                  className={`flex-1 py-2 px-3 rounded-md text-sm font-medium transition-colors ${
-                    generatorMode === 'url' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                  }`}
-                >
-                  🔗 Extract from URL
-                </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Topic <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={topic}
+                  onChange={(e) => setTopic(e.target.value)}
+                  placeholder="e.g., 5 lessons learned from failing my first startup"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow"
+                />
               </div>
 
-              {/* Topic Generator */}
-              {generatorMode === 'topic' && (<>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Topic <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={topic}
-                    onChange={(e) => setTopic(e.target.value)}
-                    placeholder="e.g., 5 lessons learned from failing my first startup"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Format
-                  </label>
-                  <select
-                    value={format}
-                    onChange={(e) => setFormat(e.target.value)}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white transition-shadow"
-                  >
-                    <option value="Text">Standard Text Post</option>
-                    <option value="Story">Personal Story</option>
-                    <option value="Listicle">Listicle / Bullet points</option>
-                    <option value="Actionable Tip">Actionable Tip</option>
-                    <option value="Contrarian">Contrarian View</option>
-                    <option value="Carousel Slides">Carousel / PDF Slides</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Angle / Tone (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={angle}
-                    onChange={(e) => setAngle(e.target.value)}
-                    placeholder="e.g., Professional yet conversational, inspiring"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow"
-                  />
-                </div>
-
-                {error && <div className="p-4 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
-
-                <button
-                  onClick={handleGenerate}
-                  disabled={isGenerating || !topic.trim()}
-                  className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-lg mt-4"
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Format
+                </label>
+                <select
+                  value={format}
+                  onChange={(e) => setFormat(e.target.value)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white transition-shadow"
                 >
-                  {isGenerating ? (
-                    <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Generating...</>
-                  ) : (
-                    <><Sparkles className="w-5 h-5 mr-2" />Generate Post</>
-                  )}
-                </button>
-              </>)}
+                  <option value="Text">Standard Text Post</option>
+                  <option value="Story">Personal Story</option>
+                  <option value="Listicle">Listicle / Bullet points</option>
+                  <option value="Actionable Tip">Actionable Tip</option>
+                  <option value="Contrarian">Contrarian View</option>
+                  <option value="Carousel Slides">Carousel / PDF Slides</option>
+                </select>
+              </div>
 
-              {/* URL Knowledge Share Extractor — Feature 2 */}
-              {generatorMode === 'url' && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
-                    <p className="text-sm font-semibold text-blue-900 mb-1">💡 Knowledge Share Extractor</p>
-                    <p className="text-xs text-blue-700">Paste any URL — GitHub PR, blog post, technical article, or industry report. The AI extracts 3 actionable insights and formats them as a 360 Brew-optimised educational post.</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Source URL</label>
-                    <input
-                      type="url"
-                      value={extractUrl}
-                      onChange={(e) => setExtractUrl(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleExtract()}
-                      placeholder="https://github.com/owner/repo/pull/123 or https://blog.example.com/post"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow"
-                    />
-                  </div>
-                  {error && <div className="p-4 bg-red-50 text-red-600 rounded-lg text-sm">{error}</div>}
-                  <button
-                    onClick={handleExtract}
-                    disabled={isExtracting || !extractUrl.trim()}
-                    className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-lg"
-                  >
-                    {isExtracting ? (
-                      <><Loader2 className="w-5 h-5 mr-2 animate-spin" />Extracting... (~15 sec)</>
-                    ) : (
-                      <>🔗 Scan &amp; Extract Knowledge</>
-                    )}
-                  </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Angle / Tone (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={angle}
+                  onChange={(e) => setAngle(e.target.value)}
+                  placeholder="e.g., Professional yet conversational, inspiring"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-shadow"
+                />
+              </div>
+
+              {error && (
+                <div className="p-4 bg-red-50 text-red-600 rounded-lg text-sm">
+                  {error}
                 </div>
               )}
 
+              <button
+                onClick={handleGenerate}
+                disabled={isGenerating || !topic.trim()}
+                className="w-full flex items-center justify-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-lg mt-8"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-5 h-5 mr-2" />
+                    Generate Post
+                  </>
+                )}
+              </button>
             </div>
           )}
 
@@ -402,78 +353,6 @@ function ContentStudioContent() {
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
               {/* Editor Section */}
               <div className="lg:col-span-3 space-y-6">
-
-                {/* Carousel Preview — Feature 4 */}
-                {carouselSlides.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold text-gray-700">🏗️ Carousel Preview ({carouselSlides.length} slides)</h3>
-                      <button
-                        onClick={handleExportPdf}
-                        disabled={isExportingPdf}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-                      >
-                        {isExportingPdf ? <><Loader2 className="w-4 h-4 animate-spin" />Generating PDF...</> : <>📄 Export as LinkedIn PDF</>}
-                      </button>
-                    </div>
-
-                    {/* Slide preview grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      {carouselSlides.map((slide, i) => (
-                        <div
-                          key={slide.id}
-                          className={`rounded-lg p-3 text-white text-xs font-medium aspect-square flex flex-col justify-between ${
-                            i === 0 ? 'bg-gradient-to-br from-indigo-600 to-purple-700' :
-                            i === 1 ? 'bg-gradient-to-br from-purple-600 to-pink-600' :
-                            i === 2 ? 'bg-gradient-to-br from-blue-600 to-cyan-600' :
-                            i === 3 ? 'bg-gradient-to-br from-emerald-600 to-teal-600' :
-                            'bg-gradient-to-br from-orange-500 to-red-600'
-                          }`}
-                        >
-                          <span className="text-white/50 text-[10px]">Slide {slide.id}</span>
-                          <div>
-                            {slide.title && <p className="font-bold leading-tight mb-1 text-[11px]">{slide.title.substring(0, 60)}{slide.title.length > 60 ? '...' : ''}</p>}
-                            {slide.body && <p className="text-white/80 text-[10px] leading-snug">{slide.body.substring(0, 80)}{slide.body.length > 80 ? '...' : ''}</p>}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Hidden full-resolution slides for PDF export */}
-                    <div style={{ position: 'fixed', left: '-9999px', top: 0, pointerEvents: 'none' }}>
-                      {carouselSlides.map((slide, i) => (
-                        <div
-                          key={slide.id}
-                          ref={el => { slideRefs.current[i] = el; }}
-                          style={{
-                            width: '1080px', height: '1080px', padding: '80px', boxSizing: 'border-box',
-                            fontFamily: 'system-ui, -apple-system, sans-serif',
-                            display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
-                            background: i === 0 ? 'linear-gradient(135deg, #4f46e5, #7c3aed)' :
-                                        i === 1 ? 'linear-gradient(135deg, #9333ea, #db2777)' :
-                                        i === 2 ? 'linear-gradient(135deg, #2563eb, #0891b2)' :
-                                        i === 3 ? 'linear-gradient(135deg, #059669, #0f766e)' :
-                                                   'linear-gradient(135deg, #f97316, #dc2626)',
-                            color: 'white', position: 'relative',
-                          }}
-                        >
-                          {!slide.isTitle && (
-                            <div style={{ position: 'absolute', top: '40px', right: '60px', fontSize: '18px', opacity: 0.6, fontWeight: 600 }}>{i + 1}</div>
-                          )}
-                          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            {slide.title && <h2 style={{ fontSize: slide.isTitle ? '72px' : '52px', fontWeight: 800, lineHeight: 1.1, marginBottom: '32px', letterSpacing: '-1px' }}>{slide.title}</h2>}
-                            {slide.body && <p style={{ fontSize: '34px', lineHeight: 1.5, opacity: 0.9 }}>{slide.body}</p>}
-                          </div>
-                          <div style={{ borderTop: '1px solid rgba(255,255,255,0.3)', paddingTop: '24px', display: 'flex', justifyContent: 'space-between' }}>
-                            <span style={{ fontSize: '20px', opacity: 0.7 }}>Sensitivity Analyser</span>
-                            <span style={{ fontSize: '18px', opacity: 0.4 }}>Swipe →</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <label className="block text-sm font-medium text-gray-700">

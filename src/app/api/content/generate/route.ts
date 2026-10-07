@@ -12,29 +12,40 @@ export async function POST(req: Request) {
     const userProfile = dbUser || { targetRole: 'Professional' };
     const model = resolveLanguageModel(modelConfig);
 
-    const isCarousel = format.toLowerCase().includes('carousel');
-    
     const prompt = `Write a LinkedIn post.
       Topic: ${topic}
       Format: ${format}
       Angle/Perspective: ${angle}
       User's Role: ${userProfile?.targetRole || 'Professional'}
       
-      MOBILE-FIRST & LINKEDIN 360 BREW CONSTRAINTS:
-      - Write in a highly conversational, authentic tone. Zero corporate jargon or generic AI intros ("In today's fast-paced world...").
-      - Mobile Hook: The "See more" button truncates posts after the first 3 lines on mobile. The first 1-2 lines MUST contain a punchy, scroll-stopping hook (under 100 characters) that forces a click.
-      - Mobile Readability: Max 1-2 short sentences per paragraph. A paragraph should not exceed 3 lines on a mobile screen.
-      - Authority & Alignment: Ensure the post demonstrates genuine subject matter expertise. Share actionable knowledge, not just engagement bait.
-      - Sprinkle 2-4 relevant emojis naturally to break up text visually.
-      - End with an engaging, casual question to invite comments.
+      ${format.toLowerCase().includes('carousel') || format.toLowerCase().includes('slide') ? `
+      CAROUSEL FORMAT INSTRUCTIONS (CRITICAL):
+      - You are generating content for a multi-slide PDF carousel.
+      - You MUST format your output exactly like this:
+      Slide 1: [Catchy Title/Hook for the Cover]
+      [Optional subtitle]
       
-      ${isCarousel ? 
-      `CAROUSEL SPECIFIC CONSTRAINTS (For Mobile Swiping):
-      - Format the output clearly into "Slide 1:", "Slide 2:", etc.
-      - Mobile slides are small: Keep text per slide EXTREMELY brief (Max 1 short headline + 15 words per slide).
-      - Include a "Title Slide" and a "Call to Action Slide".` 
-      : 
-      `- Add 3-5 relevant hashtags at the very bottom.`}
+      Slide 2: [Point 1 Title]
+      [Point 1 details - max 15 words]
+      
+      Slide 3: [Point 2 Title]
+      [Point 2 details - max 15 words]
+      
+      (Continue for up to 8 slides)
+      
+      Slide 8: [Call to Action Title]
+      [Ask a question or tell them to follow]
+      ` : ''}
+
+      Constraints:
+      - Write in a highly conversational, human, and authentic tone (like you're talking to a colleague over coffee).
+      - DO NOT use generic AI intros like "Have you ever wondered..." or "In today's fast paced world...".
+      - Start with a punchy, scroll-stopping hook (first 1-2 lines).
+      - Use plenty of whitespace (1-2 sentences per paragraph max).
+      - Sprinkle 2-4 relevant emojis naturally throughout the text to break it up visually.
+      - Avoid cringy corporate buzzwords or overly dramatic language.
+      - End with an engaging, casual question to invite comments.
+      - Add 3-5 relevant hashtags at the very bottom.
       
       Also, at the very end of your response, on a new line starting with "IMAGE_PROMPT:", provide a prompt that could be sent to an AI image generator (like DALL-E) to create an accompanying image for this post.`;
 

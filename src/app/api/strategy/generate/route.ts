@@ -108,19 +108,20 @@ CRITICAL INSTRUCTION: You MUST incorporate this feedback into the new plan. Adju
 =========================================
 `.trim() : '';
 
-    // Fetch the most recent plan to avoid repetition
-    const recentPlan = await prisma.weeklyPlan.findFirst({
+    // Fetch the 2 most recent plans to avoid repetition
+    const recentPlans = await prisma.weeklyPlan.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
+      take: 2,
     });
 
-    const avoidanceContext = recentPlan ? `
+    const avoidanceContext = recentPlans.length > 0 ? `
 =========================================
 AVOID REPETITION (CRITICAL):
-The user's previous generated plan focused on these topics:
-${recentPlan.planData.substring(0, 500)}...
+The user's recent generated plans focused on these topics:
+${recentPlans.map((plan, idx) => `Plan ${idx + 1}:\n${plan.planData.substring(0, 400)}...`).join('\n\n')}
 
-CRITICAL INSTRUCTION: You MUST generate a COMPLETELY NEW focus topic, narrative, and individual post topics. DO NOT repeat the themes, post topics, or specific engagement targets from the previous plan. Provide fresh, unique perspectives.
+CRITICAL INSTRUCTION: You MUST generate a COMPLETELY NEW focus topic, narrative, and individual post topics. DO NOT repeat the themes, post topics, or specific engagement targets from the previous plans. Provide fresh, unique perspectives.
 =========================================
 `.trim() : '';
 

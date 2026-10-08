@@ -354,19 +354,33 @@ export default function StrategyPage() {
     const engagement = plan.mode === 'weekly' ? plan.engagement : (plan.weeks?.[0]?.engagement || []);
     const postsMap: Record<string, PostItem[]> = {};
     const engMap: Record<string, EngagementItem[]> = {};
+    const parkPosts: PostItem[] = [];
+    const parkEng: EngagementItem[] = [];
+
     DAYS.forEach(d => { postsMap[d] = []; engMap[d] = []; });
+
     posts.forEach(p => {
-      const d = DAYS.includes(p.day) ? p.day : 'Monday';
-      postsMap[d].push(p);
+      if (p.day === 'Parking Lot') {
+        parkPosts.push(p);
+      } else {
+        const d = DAYS.includes(p.day) ? p.day : 'Monday';
+        postsMap[d].push(p);
+      }
     });
+
     engagement.forEach(e => {
-      const d = DAYS.includes(e.day) ? e.day : 'Tuesday';
-      engMap[d].push(e);
+      if (e.day === 'Parking Lot') {
+        parkEng.push(e);
+      } else {
+        const d = DAYS.includes(e.day) ? e.day : 'Tuesday';
+        engMap[d].push(e);
+      }
     });
+
     setBoardPosts(postsMap);
     setBoardEngagement(engMap);
-    setParkingPosts([]);
-    setParkingEngagement([]);
+    setParkingPosts(parkPosts);
+    setParkingEngagement(parkEng);
   }, [plan]);
 
   const handleGenerate = useCallback(async () => {
@@ -430,30 +444,31 @@ export default function StrategyPage() {
   };
 
   const handleMoveTo = (item: PostItem | EngagementItem, type: 'post' | 'engagement', fromDay: string, targetDay: string) => {
-    if (type === 'post') {
-      const p = item as PostItem;
-      setBoardPosts(prev => {
-        const updated = { ...prev };
-        updated[fromDay] = updated[fromDay].filter(x => x !== p);
-        if (targetDay !== 'Parking Lot') {
-          updated[targetDay] = [...(updated[targetDay] || []), { ...p, day: targetDay }];
-        } else {
-          setParkingPosts(pp => [...pp, { ...p, day: 'Parking Lot' }]);
-        }
-        return updated;
-      });
-    } else {
-      const e = item as EngagementItem;
-      setBoardEngagement(prev => {
-        const updated = { ...prev };
-        updated[fromDay] = updated[fromDay].filter(x => x !== e);
-        if (targetDay !== 'Parking Lot') {
-          updated[targetDay] = [...(updated[targetDay] || []), { ...e, day: targetDay }];
-        } else {
-          setParkingEngagement(pp => [...pp, { ...e, day: 'Parking Lot' }]);
-        }
-        return updated;
-      });
+    if (!plan) return;
+
+    const newPlan = { ...plan };
+    const itemsList = type === 'post' 
+      ? (newPlan.mode === 'weekly' ? newPlan.posts : newPlan.weeks?.[0]?.posts) 
+      : (newPlan.mode === 'weekly' ? newPlan.engagement : newPlan.weeks?.[0]?.engagement);
+
+    if (!itemsList) return;
+
+    // Find the exact item. If it's a post, match by topic. If engagement, match by goal.
+    const idx = itemsList.findIndex((x: any) => 
+      x.day === fromDay &&
+      (type === 'post' ? x.topic === (item as PostItem).topic : x.goal === (item as EngagementItem).goal)
+    );
+    
+    if (idx > -1) {
+      itemsList[idx] = { ...itemsList[idx], day: targetDay };
+      setPlan(newPlan);
+      
+      // Save the updated state to the backend silently
+      fetch('/api/strategy', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ planData: newPlan }),
+      }).catch(err => console.error("Failed to sync board state", err));
     }
   };
 

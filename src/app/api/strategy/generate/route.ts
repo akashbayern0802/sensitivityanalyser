@@ -108,6 +108,22 @@ CRITICAL INSTRUCTION: You MUST incorporate this feedback into the new plan. Adju
 =========================================
 `.trim() : '';
 
+    // Fetch the most recent plan to avoid repetition
+    const recentPlan = await prisma.weeklyPlan.findFirst({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    const avoidanceContext = recentPlan ? `
+=========================================
+AVOID REPETITION (CRITICAL):
+The user's previous generated plan focused on these topics:
+${recentPlan.planData.substring(0, 500)}...
+
+CRITICAL INSTRUCTION: You MUST generate a COMPLETELY NEW focus topic, narrative, and individual post topics. DO NOT repeat the themes, post topics, or specific engagement targets from the previous plan. Provide fresh, unique perspectives.
+=========================================
+`.trim() : '';
+
     const weeklyPrompt = `You are a LinkedIn growth strategist for the INDIAN job market, specialising in helping ${role} professionals maximise LinkedIn impressions so that both talent recruiters AND executive/retained search recruiters discover their profile organically.
 
 USER PROFILE:
@@ -125,6 +141,8 @@ ${marketContext}
 ${brew360Context}
 
 ${feedbackContext}
+
+${avoidanceContext}
 
 Respond with ONLY a valid JSON object, no markdown, no explanation:
 {
@@ -176,6 +194,8 @@ ${marketContext}
 ${brew360Context}
 
 ${feedbackContext}
+
+${avoidanceContext}
 
 Respond with ONLY a valid JSON object, no markdown, no explanation:
 {

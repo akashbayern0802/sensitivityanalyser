@@ -64,12 +64,17 @@ const FORMAT_EMOJI: Record<string, string> = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getModelConfig() {
-  if (typeof window === 'undefined') return { provider: 'gemini', modelId: 'gemini-3.8-flash' };
-  try {
-    const raw = localStorage.getItem('llmConfig');
-    if (raw) return JSON.parse(raw);
-  } catch { /* empty */ }
-  return { provider: 'gemini', modelId: 'gemini-3.8-flash' };
+  if (typeof window === 'undefined') return { provider: 'openai', modelId: 'gpt-4o-mini' };
+  
+  const provider = localStorage.getItem('sa_provider') || 'openai';
+  return {
+    provider,
+    modelId: localStorage.getItem('sa_model') || 'gpt-4o-mini',
+    apiKey: localStorage.getItem(`sa_apiKey_${provider}`) || '',
+    awsSecretKey: provider === 'amazon-bedrock' ? (localStorage.getItem('sa_awsSecretKey_amazon-bedrock') || '') : '',
+    ollamaBaseUrl: localStorage.getItem('sa_baseUrl') || '',
+    bedrockRegion: localStorage.getItem('sa_region') || ''
+  };
 }
 
 // ─── Kanban Card ──────────────────────────────────────────────────────────────

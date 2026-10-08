@@ -1,0 +1,1 @@
+import { generateText } from 'ai'; import { resolveLanguageModel } from './src/lib/ai/provider-factory'; async function run() { try { const model = resolveLanguageModel({ provider: 'google-vertex', modelId: 'gemini-3.8-flash', apiKey: 'fake-key' }); await generateText({ model, prompt: 'Hello' }); } catch (e) { console.log(e.message); } } run();

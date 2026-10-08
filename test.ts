@@ -1,0 +1,1 @@
+import { resolveLanguageModel } from './src/lib/ai/provider-factory'; const model = resolveLanguageModel({ provider: 'google-vertex', modelId: 'gemini-3.8-flash', apiKey: 'fake-key' }); console.log(model.provider);

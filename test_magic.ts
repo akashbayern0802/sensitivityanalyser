@@ -1,0 +1,1 @@
+import { generateText } from 'ai'; import { createVertex } from '@ai-sdk/google-vertex'; import 'dotenv/config'; async function run() { try { const vertex = createVertex({ apiKey: process.env.GEMINI_API_KEY }); const model = vertex('gemini-3.8-flash'); await generateText({ model, prompt: 'test' }); } catch (e) { console.log(e.message); } } run();

@@ -307,8 +307,9 @@ export default function StrategyPage() {
   // Fetch plan on mount
   useEffect(() => {
     const fetchPlan = async () => {
+      setIsLoading(true);
       try {
-        const res = await fetch('/api/strategy');
+        const res = await fetch('/api/strategy', { cache: 'no-store' });
         const data = await res.json();
         if (data.success && data.plan) {
           const parsed = JSON.parse(data.plan.planData);
@@ -317,6 +318,8 @@ export default function StrategyPage() {
         }
       } catch (err) {
         console.error('Failed to load plan', err);
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchPlan();

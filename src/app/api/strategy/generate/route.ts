@@ -75,6 +75,29 @@ MARKET CONTEXT — INDIA:
 - Comment on posts by: Indian CPOs, CHROs, Founders, and LinkedIn Top Voices in India — this puts your name in front of their recruiter networks
 `.trim() : '';
 
+    const brew360Context = [
+      '=========================================',
+      '360 BREW ALGORITHM CONTENT DIET (MANDATORY):',
+      'The LinkedIn 360 Brew algorithm rewards 3 specific content archetypes. You MUST include at least one of EACH:',
+      '',
+      `1. AUTHORITY BUILDER (format: carousel or listicle)`,
+      `   - Deep expert-level educational post. Specific frameworks, data, or step-by-step breakdowns only a ${role} would know.`,
+      `   - Algorithm classifies this as "expert knowledge" and distributes to non-followers.`,
+      `   - Topic must directly leverage user skills: ${topics}`,
+      `   - Set archetype field to: "AUTHORITY_BUILDER"`,
+      '',
+      `2. NETWORK ACTIVATOR (format: text)`,
+      `   - Short, confident opinion post that respectfully challenges a mainstream belief in ${role} or ${topics}.`,
+      `   - Must end with a debate-triggering question. 360 Brew rewards threaded comment conversations.`,
+      `   - Set archetype field to: "NETWORK_ACTIVATOR"`,
+      '',
+      `3. EXPERIENCE SHARE (format: story)`,
+      `   - Personal career anecdote that validates a professional principle. Must start with "I" or "When I".`,
+      `   - Semantic analysis detects personal experience — highly shareable by peers and recruiters.`,
+      `   - Set archetype field to: "EXPERIENCE_SHARE"`,
+      '=========================================',
+    ].join('\n').trim();
+
     const feedbackContext = feedback ? `
 =========================================
 USER FEEDBACK ON PREVIOUS PLAN:
@@ -99,6 +122,8 @@ ${goldenHoursContext}
 
 ${marketContext}
 
+${brew360Context}
+
 ${feedbackContext}
 
 Respond with ONLY a valid JSON object, no markdown, no explanation:
@@ -111,6 +136,7 @@ Respond with ONLY a valid JSON object, no markdown, no explanation:
       "day": "Monday",
       "time": "08:00",
       "format": "text",
+      "archetype": "AUTHORITY_BUILDER" | "NETWORK_ACTIVATOR" | "EXPERIENCE_SHARE",
       "topic": "specific post topic relevant to Indian market",
       "angle": "the hook or unique angle — must be compelling for Indian professional audience",
       "whyThisTime": "one sentence on why this IST slot maximises recruiter impressions"
@@ -147,6 +173,8 @@ ${goldenHoursContext}
 
 ${marketContext}
 
+${brew360Context}
+
 ${feedbackContext}
 
 Respond with ONLY a valid JSON object, no markdown, no explanation:
@@ -163,6 +191,7 @@ Respond with ONLY a valid JSON object, no markdown, no explanation:
           "day": "Monday",
           "time": "08:00",
           "format": "text",
+          "archetype": "AUTHORITY_BUILDER" | "NETWORK_ACTIVATOR" | "EXPERIENCE_SHARE",
           "topic": "specific topic searchable by Indian recruiters",
           "angle": "the hook — must resonate with Indian professional audience",
           "whyThisTime": "one sentence on why this IST slot maximises impressions"

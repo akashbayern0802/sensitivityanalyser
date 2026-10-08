@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
     const resolvedConfig = modelConfig || {
       provider: dbUser?.llmProvider || 'gemini',
-      modelId: dbUser?.llmModel || 'gemini-2.0-flash',
+      modelId: dbUser?.llmModel || 'gemini-3.8-flash',
     };
     const model = resolveLanguageModel(resolvedConfig);
 

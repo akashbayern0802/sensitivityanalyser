@@ -18,7 +18,7 @@ export type ModelConfig = {
 
 export const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini'],
-  gemini: ['gemini-3.1-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.0-flash', 'gemini-2.0-flash'],
+  gemini: ['gemini-3.8-flash', 'gemini-3.1-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.0-flash'],
   'google-vertex': [
     'gemini-3.8-flash',
     'gemini-2.0-flash',

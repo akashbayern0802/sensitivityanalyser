@@ -17,7 +17,7 @@ export async function POST(req: Request) {
 
     const resolvedConfig = modelConfig || {
       provider: dbUser?.llmProvider || 'gemini',
-      modelId: dbUser?.llmModel || 'gemini-1.5-flash',
+      modelId: dbUser?.llmModel || 'gemini-3.8-flash',
     };
     const model = resolveLanguageModel(resolvedConfig);
 
@@ -61,7 +61,7 @@ Return ONLY a raw JSON object (no markdown, no explanation):
       text = result.text;
     } catch (primaryError: any) {
       if (primaryError.message?.includes('high demand') || primaryError.message?.includes('429')) {
-        const fallbackConfig = { ...resolvedConfig, modelId: 'gemini-1.5-flash' };
+        const fallbackConfig = { ...resolvedConfig, modelId: 'gemini-3.8-flash' };
         const fallbackModel = resolveLanguageModel(fallbackConfig);
         const fallbackResult = await generateText({ model: fallbackModel, prompt });
         text = fallbackResult.text;

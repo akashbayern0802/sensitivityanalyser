@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     const dbUser = await prisma.user.findUnique({ where: { id: MOCK_USER_ID } });
     const modelConfig = {
       provider: dbUser?.llmProvider || 'gemini',
-      modelId: dbUser?.llmModel || 'gemini-1.5-flash',
+      modelId: dbUser?.llmModel || 'gemini-3.8-flash',
     };
     const model = resolveLanguageModel(modelConfig as any);
 

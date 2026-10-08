@@ -304,6 +304,24 @@ export default function StrategyPage() {
 
   const todayName = new Date().toLocaleDateString('en-US', { weekday: 'long' });
 
+  // Fetch plan on mount
+  useEffect(() => {
+    const fetchPlan = async () => {
+      try {
+        const res = await fetch('/api/strategy');
+        const data = await res.json();
+        if (data.success && data.plan) {
+          const parsed = JSON.parse(data.plan.planData);
+          setPlan({ ...parsed, mode: parsed.mode || 'weekly' });
+          if (parsed.mode) setMode(parsed.mode);
+        }
+      } catch (err) {
+        console.error('Failed to load plan', err);
+      }
+    };
+    fetchPlan();
+  }, []);
+
   // Populate board when plan changes
   useEffect(() => {
     if (!plan) return;

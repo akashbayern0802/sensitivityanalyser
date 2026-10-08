@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const p = new PrismaClient(); p.influencer.count({ where: { isSaved: true } }).then(c => console.log('Saved influencers in Postgres:', c)).finally(() => process.exit(0));

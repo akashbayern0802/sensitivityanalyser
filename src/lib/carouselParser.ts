@@ -1,13 +1,7 @@
-export interface CarouselSlide {
-  id: number;
-  title: string;
-  body: string;
-  isTitle?: boolean;
-  isCta?: boolean;
-}
+import type { Slide } from '@/components/CarouselRenderer';
 
-export function parseCarouselText(text: string): CarouselSlide[] {
-  const slides: CarouselSlide[] = [];
+export function parseCarouselText(text: string): Slide[] {
+  const slides: Slide[] = [];
 
   // Match "Slide N: Title\nBody" or "Slide N:\nTitle\nBody"
   const slideRegex = /Slide\s*(\d+)\s*:?\s*([^\n]*)?\n([\s\S]*?)(?=Slide\s*\d+\s*:|$)/gi;

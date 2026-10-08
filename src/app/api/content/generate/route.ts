@@ -18,25 +18,6 @@ export async function POST(req: Request) {
       Angle/Perspective: ${angle}
       User's Role: ${userProfile?.targetRole || 'Professional'}
       
-      ${format.toLowerCase().includes('carousel') || format.toLowerCase().includes('slide') ? `
-      CAROUSEL FORMAT INSTRUCTIONS (CRITICAL):
-      - You are generating content for a multi-slide PDF carousel.
-      - You MUST format your output exactly like this:
-      Slide 1: [Catchy Title/Hook for the Cover]
-      [Optional subtitle]
-      
-      Slide 2: [Point 1 Title]
-      [Point 1 details - max 15 words]
-      
-      Slide 3: [Point 2 Title]
-      [Point 2 details - max 15 words]
-      
-      (Continue for up to 8 slides)
-      
-      Slide 8: [Call to Action Title]
-      [Ask a question or tell them to follow]
-      ` : ''}
-
       Constraints:
       - Write in a highly conversational, human, and authentic tone (like you're talking to a colleague over coffee).
       - DO NOT use generic AI intros like "Have you ever wondered..." or "In today's fast paced world...".

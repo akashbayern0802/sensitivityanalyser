@@ -64,12 +64,12 @@ const FORMAT_EMOJI: Record<string, string> = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getModelConfig() {
-  if (typeof window === 'undefined') return { provider: 'gemini', modelId: 'gemini-2.5-flash' };
+  if (typeof window === 'undefined') return { provider: 'gemini', modelId: 'gemini-3.8-flash' };
   try {
     const raw = localStorage.getItem('llmConfig');
     if (raw) return JSON.parse(raw);
   } catch { /* empty */ }
-  return { provider: 'gemini', modelId: 'gemini-2.5-flash' };
+  return { provider: 'gemini', modelId: 'gemini-3.8-flash' };
 }
 
 // ─── Kanban Card ──────────────────────────────────────────────────────────────

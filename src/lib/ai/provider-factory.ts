@@ -18,12 +18,12 @@ export type ModelConfig = {
 
 export const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini'],
-  gemini: ['gemini-3.8-flash', 'gemini-3.1-flash-preview', 'gemini-3.1-pro-preview', 'gemini-2.0-flash'],
+  gemini: ['gemini-1.5-flash', 'gemini-1.5-flash-8b', 'gemini-1.5-pro'],
   'google-vertex': [
-    'gemini-3.8-flash',
-    'gemini-2.0-flash',
-    'gemini-2.5-pro',
-    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro',
+    'gemini-1.5-flash',
   ],
   claude: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'],
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
@@ -48,9 +48,9 @@ export const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
 export function resolveLanguageModel(config: ModelConfig): LanguageModel {
   let { provider, modelId, apiKey, ollamaBaseUrl, bedrockRegion } = config;
 
-  // Auto-upgrade deprecated Gemini model IDs
-  if (modelId === 'gemini-2.5-flash') {
-    modelId = 'gemini-3.8-flash';
+  // Auto-upgrade deprecated or invalid Gemini model IDs
+  if (['gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-2.0-flash', 'gemini-1.5-flash-8b'].includes(modelId)) {
+    modelId = 'gemini-1.5-flash';
   }
 
   switch (provider) {

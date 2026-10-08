@@ -227,7 +227,7 @@ Rules:
       console.warn('Primary model failed, attempting fallback...', primaryError.message);
       if (primaryError.message?.includes('high demand') || primaryError.message?.includes('429')) {
         // Fallback to a stable, high-capacity model
-        const fallbackConfig = { ...modelConfig, modelId: 'gemini-2.0-flash' };
+        const fallbackConfig = { ...modelConfig, modelId: 'gemini-1.5-flash' };
         const fallbackModel = resolveLanguageModel(fallbackConfig);
         const fallbackResult = await generateText({
           model: fallbackModel,

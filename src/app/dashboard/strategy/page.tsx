@@ -626,12 +626,7 @@ export default function StrategyPage() {
                         item={p}
                         type="post"
                         onDraft={() => handleDraft(p)}
-                        onMoveTo={(target) => {
-                          setParkingPosts(prev => prev.filter((_, j) => j !== i));
-                          if (target !== 'Parking Lot') {
-                            setBoardPosts(prev => ({ ...prev, [target]: [...(prev[target] || []), { ...p, day: target }] }));
-                          }
-                        }}
+                        onMoveTo={(target) => handleMoveTo(p, 'post', 'Parking Lot', target)}
                         allDays={DAYS}
                       />
                     ))}
@@ -640,12 +635,7 @@ export default function StrategyPage() {
                         key={`park-eng-${i}`}
                         item={e}
                         type="engagement"
-                        onMoveTo={(target) => {
-                          setParkingEngagement(prev => prev.filter((_, j) => j !== i));
-                          if (target !== 'Parking Lot') {
-                            setBoardEngagement(prev => ({ ...prev, [target]: [...(prev[target] || []), { ...e, day: target }] }));
-                          }
-                        }}
+                        onMoveTo={(target) => handleMoveTo(e, 'engagement', 'Parking Lot', target)}
                         allDays={DAYS}
                       />
                     ))}

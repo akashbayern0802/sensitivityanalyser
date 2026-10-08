@@ -77,6 +77,28 @@ function getModelConfig() {
   };
 }
 
+function getUserProfile() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const interests = JSON.parse(localStorage.getItem('sa_interests') || '[]');
+    return {
+      name: localStorage.getItem('sa_name') || '',
+      linkedinUrl: localStorage.getItem('sa_linkedinUrl') || '',
+      targetRole: localStorage.getItem('sa_targetRole') || '',
+      targetLocation: localStorage.getItem('sa_location') || '',
+      interests,
+    };
+  } catch {
+    return {
+      name: localStorage.getItem('sa_name') || '',
+      linkedinUrl: localStorage.getItem('sa_linkedinUrl') || '',
+      targetRole: localStorage.getItem('sa_targetRole') || '',
+      targetLocation: localStorage.getItem('sa_location') || '',
+      interests: [],
+    };
+  }
+}
+
 // ─── Kanban Card ──────────────────────────────────────────────────────────────
 
 function KanbanCard({
@@ -352,10 +374,11 @@ export default function StrategyPage() {
     setError('');
     try {
       const modelConfig = getModelConfig();
+      const userProfile = getUserProfile();
       const res = await fetch('/api/strategy/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ modelConfig, mode, feedback: feedback.trim() || undefined }),
+        body: JSON.stringify({ modelConfig, userProfile, mode, feedback: feedback.trim() || undefined }),
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Generation failed');
@@ -379,11 +402,13 @@ export default function StrategyPage() {
     setSwappingId(key);
     try {
       const modelConfig = getModelConfig();
+      const userProfile = getUserProfile();
       const res = await fetch('/api/strategy/swap', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           modelConfig,
+          userProfile,
           rejectedTopic: post.topic,
           archetype: post.archetype || 'AUTHORITY_BUILDER',
           day,

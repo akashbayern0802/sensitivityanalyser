@@ -153,19 +153,19 @@ function KanbanCard({
       </div>
 
       {/* Hover-expanded detail + actions */}
-      <div className={`overflow-hidden transition-all duration-200 ${hovered ? 'max-h-56 opacity-100' : 'max-h-0 opacity-0'}`}>
-        <div className="px-3 pb-1">
+      <div className={`overflow-hidden transition-all duration-300 ${hovered ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className="px-3 pb-1 max-h-40 overflow-y-auto [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-gray-200 [&::-webkit-scrollbar-thumb]:rounded-full pr-1">
           <p className="text-[11px] text-gray-500 italic border-t border-gray-100 pt-2 leading-relaxed">
             {post ? post.angle : eng!.goal}
           </p>
           {post?.whyThisTime && (
-            <p className="text-[10px] text-indigo-500 mt-1.5 bg-indigo-50 px-2 py-1 rounded-lg leading-relaxed">
+            <p className="text-[10px] text-indigo-700 mt-2 bg-indigo-50 px-2 py-1.5 rounded text-left leading-relaxed">
               ⏰ {post.whyThisTime}
             </p>
           )}
         </div>
 
-        <div className="px-3 pb-3 flex items-center gap-1.5 mt-2 flex-wrap">
+        <div className="px-3 pb-3 flex items-center gap-1.5 mt-2 flex-wrap border-t border-gray-50 pt-2">
           {onDraft && (
             <button
               onClick={(e) => { e.stopPropagation(); onDraft(); }}

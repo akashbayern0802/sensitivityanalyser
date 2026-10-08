@@ -46,7 +46,12 @@ export const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
 };
 
 export function resolveLanguageModel(config: ModelConfig): LanguageModel {
-  const { provider, modelId, apiKey, ollamaBaseUrl, bedrockRegion } = config;
+  let { provider, modelId, apiKey, ollamaBaseUrl, bedrockRegion } = config;
+
+  // Auto-upgrade deprecated Gemini model IDs
+  if (modelId === 'gemini-2.5-flash') {
+    modelId = 'gemini-3.8-flash';
+  }
 
   switch (provider) {
     case 'openai': {

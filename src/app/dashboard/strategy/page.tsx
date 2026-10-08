@@ -338,7 +338,7 @@ export default function StrategyPage() {
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || 'Generation failed');
-      setPlan(data.data);
+      setPlan({ ...data.data, mode: data.mode || mode });
       setFeedback('');
       setShowFeedback(false);
     } catch (e: any) {

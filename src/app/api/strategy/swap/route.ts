@@ -55,7 +55,20 @@ Return ONLY a raw JSON object (no markdown, no explanation):
   "whyThisTime": "one sentence on why posting at this IST time maximises recruiter impressions"
 }`;
 
-    const { text } = await generateText({ model, prompt });
+    let text = '';
+    try {
+      const result = await generateText({ model, prompt });
+      text = result.text;
+    } catch (primaryError: any) {
+      if (primaryError.message?.includes('high demand') || primaryError.message?.includes('429')) {
+        const fallbackConfig = { ...resolvedConfig, modelId: 'gemini-2.0-flash' };
+        const fallbackModel = resolveLanguageModel(fallbackConfig);
+        const fallbackResult = await generateText({ model: fallbackModel, prompt });
+        text = fallbackResult.text;
+      } else {
+        throw primaryError;
+      }
+    }
 
     const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
     const jsonStart = cleaned.indexOf('{');

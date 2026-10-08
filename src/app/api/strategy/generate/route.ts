@@ -216,10 +216,28 @@ Rules:
 - Days: Monday–Friday only
 - All topics must be searchable by Indian recruiters hiring for ${role}`;
 
-    const { text } = await generateText({
-      model,
-      prompt: isMonthly ? monthlyPrompt : weeklyPrompt,
-    });
+    let text = '';
+    try {
+      const result = await generateText({
+        model,
+        prompt: isMonthly ? monthlyPrompt : weeklyPrompt,
+      });
+      text = result.text;
+    } catch (primaryError: any) {
+      console.warn('Primary model failed, attempting fallback...', primaryError.message);
+      if (primaryError.message?.includes('high demand') || primaryError.message?.includes('429')) {
+        // Fallback to a stable, high-capacity model
+        const fallbackConfig = { ...modelConfig, modelId: 'gemini-2.0-flash' };
+        const fallbackModel = resolveLanguageModel(fallbackConfig);
+        const fallbackResult = await generateText({
+          model: fallbackModel,
+          prompt: isMonthly ? monthlyPrompt : weeklyPrompt,
+        });
+        text = fallbackResult.text;
+      } else {
+        throw primaryError;
+      }
+    }
 
     // Strip markdown fences and extract JSON
     const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();

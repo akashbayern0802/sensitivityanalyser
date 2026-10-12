@@ -1,7 +1,8 @@
 'use client';
 
-import { Suspense, useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send } from 'lucide-react';
 
 function ContentStudioContent() {
@@ -84,6 +85,65 @@ function ContentStudioContent() {
     navigator.clipboard.writeText(resolved);
     setCopiedSyndicateType(type);
     setTimeout(() => setCopiedSyndicateType(null), 2000);
+  };
+
+  // Distribution Channels State (Phase 2)
+  const [configuredChannels, setConfiguredChannels] = useState<Array<{ id: string; name: string; type: string; isActive: boolean }>>([]);
+  const [selectedChannelIds, setSelectedChannelIds] = useState<string[]>([]);
+  const [isDispatching, setIsDispatching] = useState(false);
+  const [dispatchResult, setDispatchResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const loadDistributionChannels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/broadcast/channels');
+      const data = await res.json();
+      if (data.success && data.channels) {
+        setConfiguredChannels(data.channels);
+        setSelectedChannelIds(data.channels.filter((c: any) => c.isActive).map((c: any) => c.id));
+      }
+    } catch (e) {
+      console.error('Failed to load distribution channels', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadDistributionChannels();
+  }, [loadDistributionChannels]);
+
+  const handleBroadcast = async () => {
+    if (!syndication?.slackSnippet || selectedChannelIds.length === 0) return;
+    setIsDispatching(true);
+    setDispatchResult(null);
+    try {
+      const res = await fetch('/api/broadcast/dispatch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contentText: syndication.slackSnippet,
+          postUrl: publishedPostUrl.trim() || undefined,
+          channelIds: selectedChannelIds,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setDispatchResult({
+          success: true,
+          message: `✓ Successfully broadcasted to ${data.dispatchedCount} communit${data.dispatchedCount === 1 ? 'y' : 'ies'}!`,
+        });
+      } else {
+        setDispatchResult({
+          success: false,
+          message: data.error || 'Broadcast failed',
+        });
+      }
+    } catch (err: any) {
+      setDispatchResult({
+        success: false,
+        message: err.message || 'Network error during broadcast',
+      });
+    } finally {
+      setIsDispatching(false);
+    }
   };
 
   // Carousel State
@@ -870,7 +930,7 @@ function ContentStudioContent() {
 
                       {/* Slack / Discord Tab */}
                       {activeSyndicateTab === 'slack' && (
-                        <div className="space-y-3 bg-white/5 border border-white/10 rounded-xl p-4">
+                        <div className="space-y-4 bg-white/5 border border-white/10 rounded-xl p-4">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-medium text-purple-300">
                               💬 Markdown discussion starter for #reading or #strategy channels
@@ -886,6 +946,85 @@ function ContentStudioContent() {
 
                           <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-mono">
                             {getResolvedAsset(syndication.slackSnippet)}
+                          </div>
+
+                          {/* Automated Webhook Broadcast Section */}
+                          <div className="pt-3 border-t border-white/10 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                                <Send className="w-3.5 h-3.5 text-purple-400" />
+                                Automated Webhook Broadcast (Slack / Discord)
+                              </span>
+                              <Link
+                                href="/dashboard/settings"
+                                className="text-[11px] text-purple-300 hover:text-white flex items-center gap-1 transition-colors"
+                              >
+                                Manage Webhooks →
+                              </Link>
+                            </div>
+
+                            {configuredChannels.length === 0 ? (
+                              <div className="p-3 bg-white/5 rounded-lg border border-dashed border-white/10 text-center">
+                                <p className="text-xs text-gray-400 mb-1">No community webhooks connected yet.</p>
+                                <Link
+                                  href="/dashboard/settings"
+                                  className="text-xs text-purple-400 hover:text-purple-300 font-semibold"
+                                >
+                                  + Configure Slack/Discord Webhooks in Settings
+                                </Link>
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5">
+                                <p className="text-[11px] text-gray-300">Select target community channels:</p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                  {configuredChannels.map((ch) => (
+                                    <label
+                                      key={ch.id}
+                                      className={`flex items-center gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                                        selectedChannelIds.includes(ch.id)
+                                          ? 'bg-purple-900/40 border-purple-500/60 text-white'
+                                          : 'bg-black/30 border-white/10 text-gray-400 hover:text-gray-200'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedChannelIds.includes(ch.id)}
+                                        onChange={(e) => {
+                                          if (e.target.checked) {
+                                            setSelectedChannelIds((prev) => [...prev, ch.id]);
+                                          } else {
+                                            setSelectedChannelIds((prev) => prev.filter((id) => id !== ch.id));
+                                          }
+                                        }}
+                                        className="rounded border-gray-600 text-purple-600 focus:ring-0"
+                                      />
+                                      <span className="truncate">{ch.name}</span>
+                                    </label>
+                                  ))}
+                                </div>
+
+                                <button
+                                  onClick={handleBroadcast}
+                                  disabled={isDispatching || selectedChannelIds.length === 0}
+                                  className="w-full mt-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                                >
+                                  {isDispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                  {isDispatching ? 'Broadcasting...' : `Broadcast to ${selectedChannelIds.length} Communit${selectedChannelIds.length === 1 ? 'y' : 'ies'} (1-Click)`}
+                                </button>
+
+                                {dispatchResult && (
+                                  <div
+                                    className={`p-2.5 rounded-lg text-xs ${
+                                      dispatchResult.success
+                                        ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-600/40'
+                                        : 'bg-red-950/60 text-red-300 border border-red-600/40'
+                                    }`}
+                                  >
+                                    {dispatchResult.message}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

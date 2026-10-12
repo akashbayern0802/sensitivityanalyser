@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Eye, EyeOff, UploadCloud, X, Save, CheckCircle2, AlertCircle, Loader2, FileText } from 'lucide-react';
+import { DistributionChannelsManager } from './distribution-channels';
 
 // ─── LinkedIn CSV Import component ───────────────────────────────────────────
 
@@ -924,6 +925,9 @@ export default function SettingsPage() {
           </div>
         </div>
       </section>
+      
+      {/* Distribution Channels & Community Webhooks */}
+      <DistributionChannelsManager />
 
       {/* Import Profile Data */}
       <section className="bg-white shadow-sm ring-1 ring-gray-900/5 sm:rounded-xl md:col-span-2">

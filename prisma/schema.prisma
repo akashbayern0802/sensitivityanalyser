@@ -207,3 +207,39 @@ model EngagementLog {
   influencer   Influencer @relation(fields: [influencerId], references: [id], onDelete: Cascade)
 }
 
+model DistributionChannel {
+  id          String   @id @default(cuid())
+  userId      String   @default("user_mock_id")
+  name        String   // e.g. 'The Product Folks Slack', 'X Personal', 'CXO WhatsApp Pod'
+  type        String   // 'slack_webhook' | 'discord_webhook' | 'buffer' | 'whatsapp_intent'
+  endpointUrl String?  // Webhook URL or Buffer profile ID
+  authToken   String?  // Optional API key or bearer token
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  broadcastLogs BroadcastLog[]
+}
+
+model SyndicationDraft {
+  id             String   @id @default(cuid())
+  userId         String   @default("user_mock_id")
+  contentDraftId String?
+  channelType    String   // 'twitter' | 'slack' | 'whatsapp'
+  formattedText  String
+  utmUrl         String?
+  status         String   @default("draft") // 'draft' | 'queued' | 'dispatched'
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model BroadcastLog {
+  id           String   @id @default(cuid())
+  channelId    String
+  contentId    String?
+  status       String   // 'success' | 'failed'
+  responseLog  String?
+  dispatchedAt DateTime @default(now())
+
+  channel DistributionChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+}
+

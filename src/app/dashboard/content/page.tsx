@@ -2,7 +2,7 @@
 
 import { Suspense, useState, useEffect, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate } from 'lucide-react';
+import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send } from 'lucide-react';
 
 function ContentStudioContent() {
   const searchParams = useSearchParams();
@@ -32,6 +32,59 @@ function ContentStudioContent() {
   const [alignmentFeedback, setAlignmentFeedback] = useState<string[]>([]);
   const [alignmentSuggestion, setAlignmentSuggestion] = useState('');
   const [isCheckingAlignment, setIsCheckingAlignment] = useState(false);
+
+  // Syndication & Launchpad State (Phase 1)
+  const [syndication, setSyndication] = useState<{
+    xTeaser: string;
+    whatsappSnippet: string;
+    slackSnippet: string;
+  } | null>(null);
+  const [isSyndicating, setIsSyndicating] = useState(false);
+  const [activeSyndicateTab, setActiveSyndicateTab] = useState<'whatsapp' | 'twitter' | 'slack'>('whatsapp');
+  const [publishedPostUrl, setPublishedPostUrl] = useState('');
+  const [copiedSyndicateType, setCopiedSyndicateType] = useState<string | null>(null);
+
+  const handleGenerateSyndication = async () => {
+    if (!postBody.trim()) return;
+    setIsSyndicating(true);
+    try {
+      const config = getLLMConfig();
+      const res = await fetch('/api/syndicate/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postBody,
+          postUrl: publishedPostUrl.trim() || undefined,
+          targetRole: localStorage.getItem('sa_targetRole') || 'Senior Tech & Product Leader',
+          modelConfig: config,
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.syndication) {
+        setSyndication(data.syndication);
+      } else {
+        alert(data.error || 'Failed to generate syndication assets');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Error generating syndication assets');
+    } finally {
+      setIsSyndicating(false);
+    }
+  };
+
+  const getResolvedAsset = (rawText: string) => {
+    if (!rawText) return '';
+    return publishedPostUrl.trim()
+      ? rawText.replace(/\[LINKEDIN_POST_LINK\]/g, publishedPostUrl.trim())
+      : rawText;
+  };
+
+  const copySyndicateText = (text: string, type: string) => {
+    const resolved = getResolvedAsset(text);
+    navigator.clipboard.writeText(resolved);
+    setCopiedSyndicateType(type);
+    setTimeout(() => setCopiedSyndicateType(null), 2000);
+  };
 
   // Carousel State
   const [carouselSlides, setCarouselSlides] = useState<Array<{id:number;title:string;body:string;isTitle?:boolean;isCta?:boolean}>>([]);
@@ -670,6 +723,180 @@ function ContentStudioContent() {
                       </>
                     )}
                   </button>
+                </div>
+
+                {/* ─── Cross-Platform Launchpad & Syndication (Phase 1) ─── */}
+                <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 border border-indigo-800/40 shadow-lg space-y-4">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 bg-indigo-500/20 text-indigo-300 rounded-lg text-sm">🚀</span>
+                        <h3 className="text-sm font-bold text-white tracking-tight">Cross-Platform Launchpad</h3>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/30 text-indigo-200 border border-indigo-400/20">
+                          Audience Funnel
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-gray-300 mt-1">
+                        Turn this LinkedIn post into satellite teasers to route peer leaders from WhatsApp, X &amp; Slack directly to your profile.
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleGenerateSyndication}
+                      disabled={isSyndicating || !postBody.trim()}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shrink-0"
+                    >
+                      {isSyndicating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      {syndication ? 'Regenerate Satellite Assets' : 'Generate Satellite Assets'}
+                    </button>
+                  </div>
+
+                  {/* LinkedIn Published URL helper */}
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-3">
+                    <label className="text-[11px] font-medium text-gray-300 block mb-1">
+                      🔗 Published LinkedIn Post Link (optional — replaces [LINKEDIN_POST_LINK] in all assets)
+                    </label>
+                    <input
+                      type="url"
+                      value={publishedPostUrl}
+                      onChange={(e) => setPublishedPostUrl(e.target.value)}
+                      placeholder="https://www.linkedin.com/posts/..."
+                      className="w-full bg-black/40 border border-white/15 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-indigo-400 font-mono"
+                    />
+                  </div>
+
+                  {syndication ? (
+                    <div className="space-y-3 pt-1">
+                      {/* Sub-tabs */}
+                      <div className="flex border-b border-white/10 gap-2">
+                        <button
+                          onClick={() => setActiveSyndicateTab('whatsapp')}
+                          className={`pb-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+                            activeSyndicateTab === 'whatsapp'
+                              ? 'border-emerald-400 text-emerald-400'
+                              : 'border-transparent text-gray-400 hover:text-gray-200'
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                          WhatsApp CXO Pod (1-Click)
+                        </button>
+                        <button
+                          onClick={() => setActiveSyndicateTab('twitter')}
+                          className={`pb-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+                            activeSyndicateTab === 'twitter'
+                              ? 'border-sky-400 text-sky-400'
+                              : 'border-transparent text-gray-400 hover:text-gray-200'
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-sky-400"></span>
+                          X / Twitter Teaser
+                        </button>
+                        <button
+                          onClick={() => setActiveSyndicateTab('slack')}
+                          className={`pb-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+                            activeSyndicateTab === 'slack'
+                              ? 'border-purple-400 text-purple-400'
+                              : 'border-transparent text-gray-400 hover:text-gray-200'
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+                          Slack / Discord Communities
+                        </button>
+                      </div>
+
+                      {/* WhatsApp Pod Tab */}
+                      {activeSyndicateTab === 'whatsapp' && (
+                        <div className="space-y-3 bg-white/5 border border-white/10 rounded-xl p-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-medium text-emerald-300 flex items-center gap-1.5">
+                              💬 Formatted for peer debate in your 5-7 person leadership pod
+                            </span>
+                            <button
+                              onClick={() => copySyndicateText(syndication.whatsappSnippet, 'whatsapp')}
+                              className="text-xs text-gray-300 hover:text-white flex items-center gap-1"
+                            >
+                              {copiedSyndicateType === 'whatsapp' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              {copiedSyndicateType === 'whatsapp' ? 'Copied' : 'Copy Text'}
+                            </button>
+                          </div>
+
+                          <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-sans">
+                            {getResolvedAsset(syndication.whatsappSnippet)}
+                          </div>
+
+                          <a
+                            href={`https://api.whatsapp.com/send?text=${encodeURIComponent(getResolvedAsset(syndication.whatsappSnippet))}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            Launch WhatsApp with Message (1-Click)
+                          </a>
+                        </div>
+                      )}
+
+                      {/* X / Twitter Teaser Tab */}
+                      {activeSyndicateTab === 'twitter' && (
+                        <div className="space-y-3 bg-white/5 border border-white/10 rounded-xl p-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-medium text-sky-300">
+                              🐦 High-signal teaser hook ({getResolvedAsset(syndication.xTeaser).length} / 280 chars)
+                            </span>
+                            <button
+                              onClick={() => copySyndicateText(syndication.xTeaser, 'twitter')}
+                              className="text-xs text-gray-300 hover:text-white flex items-center gap-1"
+                            >
+                              {copiedSyndicateType === 'twitter' ? <Check className="w-3.5 h-3.5 text-sky-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              {copiedSyndicateType === 'twitter' ? 'Copied' : 'Copy Tweet'}
+                            </button>
+                          </div>
+
+                          <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-sans">
+                            {getResolvedAsset(syndication.xTeaser)}
+                          </div>
+
+                          <a
+                            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(getResolvedAsset(syndication.xTeaser))}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Open X Composer with Tweet Pre-filled
+                          </a>
+                        </div>
+                      )}
+
+                      {/* Slack / Discord Tab */}
+                      {activeSyndicateTab === 'slack' && (
+                        <div className="space-y-3 bg-white/5 border border-white/10 rounded-xl p-4">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-medium text-purple-300">
+                              💬 Markdown discussion starter for #reading or #strategy channels
+                            </span>
+                            <button
+                              onClick={() => copySyndicateText(syndication.slackSnippet, 'slack')}
+                              className="text-xs text-gray-300 hover:text-white flex items-center gap-1"
+                            >
+                              {copiedSyndicateType === 'slack' ? <Check className="w-3.5 h-3.5 text-purple-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              {copiedSyndicateType === 'slack' ? 'Copied' : 'Copy Markdown'}
+                            </button>
+                          </div>
+
+                          <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-mono">
+                            {getResolvedAsset(syndication.slackSnippet)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-5 text-center border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
+                      <p className="text-xs text-gray-400">
+                        Once your post text is ready above, click <strong>&quot;Generate Satellite Assets&quot;</strong> to prepare your multi-channel launchpad.
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
 

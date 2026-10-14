@@ -1,7 +1,17 @@
 import { GoogleGenAI } from '@google/genai';
 import prisma from '@/lib/db';
 
-export const VERTEX_MODEL = 'gemini-3.8-flash';
+export async function getVertexModel(): Promise<string> {
+  try {
+    const dbUser = await prisma.user.findUnique({ where: { id: 'user_mock_id' } });
+    if (dbUser?.llmModel) return dbUser.llmModel;
+  } catch {
+    // fallback
+  }
+  return 'gemini-4-argon';
+}
+
+export const VERTEX_MODEL = 'gemini-4-argon';
 
 export interface DiscoveredExecutive {
   name: string;
@@ -47,15 +57,35 @@ export async function discoverExecutives(
     triggerContext ? `, who are relevant given this recent news: ${triggerContext}` : ''
   }. List 5 specific real people.`;
 
-  const research = await ai.models.generateContent({
-    model: VERTEX_MODEL,
-    contents: researchPrompt,
-    config: {
-      tools: [{ googleSearch: {} }],
-      temperature: 0.2,
-      thinkingConfig: { thinkingBudget: 0 },
-    },
-  });
+  const modelName = await getVertexModel();
+
+  let research: any;
+  try {
+    research = await ai.models.generateContent({
+      model: modelName,
+      contents: researchPrompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        temperature: 0.2,
+        thinkingConfig: { thinkingBudget: 0 },
+      },
+    });
+  } catch (err: any) {
+    if (modelName !== 'gemini-3.8-flash') {
+      console.warn(`[executive-discovery] Model ${modelName} failed, falling back to gemini-3.8-flash:`, err?.message);
+      research = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: researchPrompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          temperature: 0.2,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   let researchText = '';
   for (const part of research.candidates?.[0]?.content?.parts ?? []) {
@@ -66,11 +96,24 @@ export async function discoverExecutives(
 
   const formatPrompt = `Extract the people from this research text and return ONLY a raw JSON array with no prose or markdown. Each item must have: name, company (employer name only), headline (job title + company), linkedinUrl, whyFollow, topics (string array). Research: ${researchText.substring(0, 3000)}`;
 
-  const formatted = await ai.models.generateContent({
-    model: VERTEX_MODEL,
-    contents: formatPrompt,
-    config: { temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
-  });
+  let formatted: any;
+  try {
+    formatted = await ai.models.generateContent({
+      model: modelName,
+      contents: formatPrompt,
+      config: { temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+    });
+  } catch (err: any) {
+    if (modelName !== 'gemini-3.8-flash') {
+      formatted = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: formatPrompt,
+        config: { temperature: 0.1, thinkingConfig: { thinkingBudget: 0 } },
+      });
+    } else {
+      throw err;
+    }
+  }
 
   return extractJsonArray(formatted.text ?? '') ?? [];
 }

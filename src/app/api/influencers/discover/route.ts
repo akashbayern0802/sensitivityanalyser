@@ -3,6 +3,16 @@ import { NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import prisma from '@/lib/db';
 
+async function getVertexModel(): Promise<string> {
+  try {
+    const dbUser = await prisma.user.findUnique({ where: { id: 'user_mock_id' } });
+    if (dbUser?.llmModel) return dbUser.llmModel;
+  } catch {
+    // fallback
+  }
+  return 'gemini-3.8-flash';
+}
+
 const VERTEX_MODEL = 'gemini-3.8-flash';
 
 interface DiscoveredInfluencer {
@@ -73,11 +83,13 @@ async function discoverInfluencers(
   const regionSuffix = country && country.trim() ? ` based in ${country}` : '';
   const researchPrompt = `Find the names, current job titles, company names, LinkedIn profile URLs, and why they are influential for ${query}${regionSuffix}. List 5 specific real people.`;
 
-  console.log('[discover] Step 1: Running grounded research...');
-  let researchResponse;
+  const modelName = await getVertexModel();
+
+  console.log(`[discover] Step 1: Running grounded research with ${modelName}...`);
+  let researchResponse: any;
   try {
     researchResponse = await ai.models.generateContent({
-      model: VERTEX_MODEL,
+      model: modelName,
       contents: researchPrompt,
       config: {
         tools: [{ googleSearch: {} }],
@@ -86,8 +98,25 @@ async function discoverInfluencers(
       },
     });
   } catch (err: any) {
-    console.error('[discover] Grounded API call threw:', err.message);
-    throw new Error(`Google Search grounding crashed. Try a slightly broader niche. (${err.message})`);
+    if (modelName !== 'gemini-3.8-flash') {
+      console.warn(`[discover] Model ${modelName} failed, falling back to gemini-3.8-flash:`, err?.message);
+      try {
+        researchResponse = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: researchPrompt,
+          config: {
+            tools: [{ googleSearch: {} }],
+            temperature: 0.2,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
+        });
+      } catch (fbErr: any) {
+        throw new Error(`Google Search grounding crashed. Try a slightly broader niche. (${fbErr.message})`);
+      }
+    } else {
+      console.error('[discover] Grounded API call threw:', err.message);
+      throw new Error(`Google Search grounding crashed. Try a slightly broader niche. (${err.message})`);
+    }
   }
 
   let researchText = '';
@@ -114,11 +143,11 @@ async function discoverInfluencers(
   // STEP 2: Format to strict JSON — no grounding, no thinking, just extraction
   const formatPrompt = `Extract the people from this research text and return ONLY a raw JSON array with no prose or markdown. Each item must have: name, company (employer name only, e.g. "Ola"), headline (job title + company, e.g. "Co-Founder & CEO, Ola"), linkedinUrl, whyFollow, topics (string array). Research: ${researchText.substring(0, 3000)}`;
 
-  console.log('[discover] Step 2: Formatting to JSON...');
-  let formatResponse;
+  console.log(`[discover] Step 2: Formatting to JSON with ${modelName}...`);
+  let formatResponse: any;
   try {
     formatResponse = await ai.models.generateContent({
-      model: VERTEX_MODEL,
+      model: modelName,
       contents: formatPrompt,
       config: {
         temperature: 0.1,
@@ -126,7 +155,18 @@ async function discoverInfluencers(
       },
     });
   } catch (err: any) {
-    throw new Error(`JSON Formatting failed: ${err.message}`);
+    if (modelName !== 'gemini-3.8-flash') {
+      formatResponse = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: formatPrompt,
+        config: {
+          temperature: 0.1,
+          thinkingConfig: { thinkingBudget: 0 },
+        },
+      });
+    } else {
+      throw new Error(`JSON Formatting failed: ${err.message}`);
+    }
   }
 
   const jsonText = formatResponse.text ?? '';

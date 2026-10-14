@@ -19,7 +19,9 @@ import {
   Clock,
   Calendar,
   GripVertical,
-  Newspaper
+  Newspaper,
+  UserPlus,
+  Send
 } from 'lucide-react';
 
 interface Influencer {
@@ -193,8 +195,8 @@ function CommentDrawer({
             {influencer.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="font-semibold text-gray-900 truncate">{influencer.name}</h2>
-            <p className="text-xs text-gray-500 truncate">{influencer.headline}</p>
+            <h2 className="font-semibold text-gray-900 break-words leading-snug">{influencer.name}</h2>
+            <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{influencer.headline}</p>
           </div>
           <div className="flex gap-2">
             <a href={influencer.linkedinUrl} target="_blank" rel="noopener noreferrer"
@@ -286,6 +288,303 @@ function CommentDrawer({
   );
 }
 
+function InviteDrawer({
+  influencer,
+  onClose,
+  onLogInvite,
+}: {
+  influencer: Influencer;
+  onClose: () => void;
+  onLogInvite?: (inf: Influencer, noteText: string) => void;
+}) {
+  const [customContext, setCustomContext] = useState('');
+  const [invites, setInvites] = useState<{ type: string; label: string; subtitle: string; text: string }[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [connectedIndex, setConnectedIndex] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [newsUsed, setNewsUsed] = useState<{ title: string; summary: string | null; url: string } | null>(null);
+
+  const getModelConfig = () => {
+    const provider = localStorage.getItem('sa_provider') || 'google-vertex';
+    return {
+      provider,
+      modelId: localStorage.getItem('sa_model') || 'gemini-3.8-flash',
+      apiKey: localStorage.getItem(`sa_apiKey_${provider}`) || '',
+      ollamaBaseUrl: localStorage.getItem('sa_baseUrl') || '',
+      bedrockRegion: localStorage.getItem('sa_region') || '',
+    };
+  };
+
+  const handleGenerateInvites = async (contextOverride?: string) => {
+    setIsGenerating(true);
+    setError('');
+    try {
+      const res = await fetch('/api/influencers/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          influencer,
+          customContext: contextOverride !== undefined ? contextOverride : customContext,
+          modelConfig: getModelConfig(),
+        }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || 'Failed to generate invitations');
+      setInvites(data.invites || []);
+      if (data.newsUsed) setNewsUsed(data.newsUsed);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    handleGenerateInvites('');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [influencer.id, influencer.name]);
+
+  const handleEditInvite = (idx: number, newText: string) => {
+    setInvites(prev => prev.map((item, i) => (i === idx ? { ...item, text: newText } : item)));
+  };
+
+  const copyNote = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(idx);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
+
+  const copyAndConnect = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text);
+    setConnectedIndex(idx);
+    if (onLogInvite && influencer.id) {
+      onLogInvite(influencer, text);
+    }
+    window.open(influencer.linkedinUrl, '_blank', 'noopener,noreferrer');
+    setTimeout(() => setConnectedIndex(null), 3000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-white h-full shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b bg-gradient-to-r from-emerald-50 to-teal-50">
+          <div className="w-10 h-10 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold shrink-0">
+            {influencer.name.charAt(0)}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="font-semibold text-gray-900 break-words leading-snug">{influencer.name}</h2>
+              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0">
+                Invite Studio
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">
+              {influencer.companyName ? `${influencer.companyName} • ` : ''}{influencer.headline}
+            </p>
+          </div>
+          <div className="flex gap-1.5">
+            <a
+              href={influencer.linkedinUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+              title="Open LinkedIn Profile"
+            >
+              <ExternalLink className="w-4 h-4" />
+            </a>
+            <button
+              onClick={onClose}
+              className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          <div className="p-3.5 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs text-emerald-900 leading-relaxed">
+            <p className="font-semibold flex items-center gap-1.5 mb-1">
+              <UserPlus className="w-3.5 h-3.5 text-emerald-600" />
+              LinkedIn Connection Note Generator (&lt; 300 chars)
+            </p>
+            <p className="text-emerald-700">
+              Tailored peer-level invitations crafted from {influencer.name.split(' ')[0]}&apos;s role
+              {influencer.companyName ? ` at ${influencer.companyName}` : ''} and your executive positioning.
+            </p>
+          </div>
+
+          {newsUsed && (
+            <div className="flex flex-col gap-1 p-3 bg-orange-50 border border-orange-100 rounded-xl text-xs">
+              <div className="flex items-center gap-1.5 text-orange-700 font-semibold">
+                <Newspaper className="w-3.5 h-3.5" /> Company Intel Hook Injected ({influencer.companyName})
+              </div>
+              <a
+                href={newsUsed.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-orange-900 hover:underline leading-snug"
+              >
+                {newsUsed.title}
+              </a>
+            </div>
+          )}
+
+          {/* Optional Custom Context */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+              Optional Custom Context / Shared Hook
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={customContext}
+                onChange={(e) => setCustomContext(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleGenerateInvites()}
+                placeholder="e.g. Met at FinTech Summit, loved their podcast on AI governance…"
+                className="flex-1 px-3.5 py-2 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-xs"
+              />
+              <button
+                onClick={() => handleGenerateInvites()}
+                disabled={isGenerating}
+                className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 shrink-0 disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
+                Tailor
+              </button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-100 text-red-700 rounded-xl text-sm">
+              {error}
+            </div>
+          )}
+
+          {isGenerating && (
+            <div className="space-y-3 py-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="p-4 rounded-xl border border-gray-100 bg-gray-50/70 animate-pulse space-y-2.5">
+                  <div className="h-4 bg-gray-200 rounded w-2/5" />
+                  <div className="h-3 bg-gray-200 rounded w-full" />
+                  <div className="h-3 bg-gray-200 rounded w-4/5" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!isGenerating && invites.length > 0 && (
+            <div className="space-y-3.5">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                Select &amp; Customize Invitation Note
+              </h3>
+              {invites.map((invite, idx) => {
+                const charCount = invite.text.length;
+                const isOverLimit = charCount > 300;
+                return (
+                  <div
+                    key={idx}
+                    className="p-4 rounded-xl bg-gray-50 border border-gray-200/80 hover:border-emerald-300 transition-all space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <span
+                          className={`inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-0.5 rounded-full ${
+                            invite.type === 'peer_synergy'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : invite.type === 'company_hook'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-indigo-100 text-indigo-800'
+                          }`}
+                        >
+                          {invite.label}
+                        </span>
+                        <p className="text-[11px] text-gray-400 mt-0.5 pl-1">{invite.subtitle}</p>
+                      </div>
+                      <span
+                        className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded-md ${
+                          isOverLimit
+                            ? 'bg-red-100 text-red-700'
+                            : charCount > 260
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-200/70 text-gray-600'
+                        }`}
+                      >
+                        {charCount}/300 chars
+                      </span>
+                    </div>
+
+                    <textarea
+                      value={invite.text}
+                      onChange={(e) => handleEditInvite(idx, e.target.value)}
+                      rows={3}
+                      className="w-full p-2.5 rounded-lg bg-white border border-gray-200 text-gray-800 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 resize-none"
+                    />
+
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={() => copyNote(invite.text, idx)}
+                        className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-100 text-gray-700 text-xs font-medium flex items-center gap-1.5 transition-colors"
+                      >
+                        {copiedIndex === idx ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-600" /> Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5" /> Copy Note
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => copyAndConnect(invite.text, idx)}
+                        className="flex-1 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+                      >
+                        {connectedIndex === idx ? (
+                          <>
+                            <Check className="w-3.5 h-3.5" /> Copied &amp; Opening LinkedIn…
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-3.5 h-3.5" /> Copy &amp; Connect on LinkedIn
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t bg-white">
+          <button
+            onClick={() => handleGenerateInvites()}
+            disabled={isGenerating}
+            className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {isGenerating ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" /> Crafting Personalised Invites…
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" /> Regenerate 3 Invite Options
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function InfluencersPage() {
@@ -311,6 +610,8 @@ export default function InfluencersPage() {
   const [crmView, setCrmView] = useState<'pipeline' | 'accounts'>('pipeline');
   const [companyFilter, setCompanyFilter] = useState<string>('');
   const [selectedInfluencer, setSelectedInfluencer] = useState<Influencer | null>(null);
+  const [inviteInfluencer, setInviteInfluencer] = useState<Influencer | null>(null);
+  const [expandedCardId, setExpandedCardId] = useState<string | null>(null);
 
   // ── Update CRM Status & Company
   const handleUpdateStatus = async (inf: Influencer, newStatus: string, newCompany?: string) => {
@@ -350,6 +651,23 @@ export default function InfluencersPage() {
       fetchSaved(); // get true DB state
     } catch {
       fetchSaved(); // revert on fail
+    }
+  };
+
+  const handleLogInvite = async (inf: Influencer, noteText: string) => {
+    if (!inf.id) return;
+    const newStatus = inf.status === 'connected' ? 'connected' : 'engaged';
+    const now = new Date().toISOString();
+    setSavedInfluencers(prev => prev.map(s => s.id === inf.id ? { ...s, status: newStatus as any, lastEngagedAt: now } : s));
+    try {
+      await fetch('/api/influencers/engagement', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ influencerId: inf.id, actionType: 'connection_request', notes: noteText }),
+      });
+      fetchSaved();
+    } catch {
+      fetchSaved();
     }
   };
 
@@ -590,9 +908,15 @@ export default function InfluencersPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {influencers.map((inf, idx) => (
-                  <div key={inf.id || idx}
-                    className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md hover:border-indigo-200 transition-all group">
+                {influencers.map((inf, idx) => {
+                  const cardKey = inf.id || `discover-${idx}`;
+                  const isExpanded = expandedCardId === cardKey;
+                  return (
+                  <div key={cardKey}
+                    onClick={() => setExpandedCardId(prev => prev === cardKey ? null : cardKey)}
+                    className={`bg-white rounded-xl border shadow-sm hover:shadow-md transition-all group cursor-pointer ${
+                      isExpanded ? 'border-indigo-300 ring-2 ring-indigo-500/15' : 'border-gray-100 hover:border-indigo-200'
+                    }`}>
                     <div className="p-5">
                       {/* Card header */}
                       <div className="flex items-start gap-3 mb-3">
@@ -600,8 +924,10 @@ export default function InfluencersPage() {
                           {inf.name.charAt(0)}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors truncate">{inf.name}</h3>
-                          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2 leading-relaxed">{inf.headline}</p>
+                          <h3 className={`font-semibold text-gray-900 group-hover:text-indigo-700 transition-colors ${isExpanded ? 'whitespace-normal break-words' : 'truncate'}`} title={inf.name}>
+                            {inf.name}
+                          </h3>
+                          <p className={`text-xs text-gray-500 mt-0.5 leading-relaxed ${isExpanded ? 'whitespace-normal' : 'line-clamp-2'}`}>{inf.headline}</p>
                         </div>
                       </div>
 
@@ -631,10 +957,18 @@ export default function InfluencersPage() {
                         </button>
 
                         {/* Comment Studio */}
-                        <button type="button" onClick={() => setSelectedInfluencer(inf)}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setSelectedInfluencer(inf); }}
                           className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg transition-colors">
                           <MessageSquare className="w-3.5 h-3.5" />
-                          Comment Studio
+                          Comment
+                        </button>
+
+                        {/* Invite Studio */}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); setInviteInfluencer(inf); }}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg transition-colors"
+                          title="Generate LinkedIn Connection Invite">
+                          <UserPlus className="w-3.5 h-3.5" />
+                          Invite Note
                         </button>
 
                         {/* LinkedIn */}
@@ -654,7 +988,8 @@ export default function InfluencersPage() {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -734,80 +1069,131 @@ export default function InfluencersPage() {
               <>
                 {/* --- PIPELINE VIEW --- */}
                 {crmView === 'pipeline' && (
-                  <div className="flex overflow-x-auto md:grid md:grid-cols-4 gap-4 pb-4 snap-x snap-mandatory hide-scrollbar">
+                  <div className="flex overflow-x-auto gap-5 pb-4 snap-x snap-mandatory hide-scrollbar">
                     {['inbox', 'cold', 'engaged', 'connected'].map(col => (
-                      <div key={col} className="bg-gray-50 rounded-xl p-3 min-w-[300px] md:min-w-0 snap-center shrink-0">
-                        <div className="flex items-center justify-between mb-3 px-1">
+                      <div key={col} className="bg-gray-50 rounded-2xl p-4 min-w-[285px] flex-1 snap-center shrink-0">
+                        <div className="flex items-center justify-between mb-3.5 px-1">
                           <h3 className="font-semibold text-sm text-gray-700 capitalize flex items-center gap-2">
-                            {col === 'inbox' && <div className="w-2 h-2 rounded-full bg-gray-400" />}
-                            {col === 'cold' && <div className="w-2 h-2 rounded-full bg-blue-400" />}
-                            {col === 'engaged' && <div className="w-2 h-2 rounded-full bg-orange-400" />}
-                            {col === 'connected' && <div className="w-2 h-2 rounded-full bg-green-400" />}
+                            {col === 'inbox' && <div className="w-2.5 h-2.5 rounded-full bg-gray-400" />}
+                            {col === 'cold' && <div className="w-2.5 h-2.5 rounded-full bg-blue-400" />}
+                            {col === 'engaged' && <div className="w-2.5 h-2.5 rounded-full bg-orange-400" />}
+                            {col === 'connected' && <div className="w-2.5 h-2.5 rounded-full bg-green-400" />}
                             {col === 'inbox' ? 'Inbox (Unverified)' : col === 'cold' ? 'Cold Target' : col}
                           </h3>
-                          <span className="text-xs font-medium text-gray-400 bg-gray-200 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-semibold text-gray-500 bg-gray-200/80 px-2.5 py-0.5 rounded-full">
                             {filteredInfluencers.filter(inf => (inf.status || 'inbox') === col).length}
                           </span>
                         </div>
-                        <div className="space-y-3">
-                          {filteredInfluencers.filter(inf => (inf.status || 'inbox') === col).map(inf => (
-                            <div key={inf.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 hover:shadow-md transition-all relative group">
-                              <div className="flex items-start gap-3 mb-2">
-                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm shrink-0">
-                                  {inf.name.charAt(0)}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <h4 className="font-semibold text-sm text-gray-900 truncate">{inf.name}</h4>
-                                    {inf.source === 'auto' && (
-                                      <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wide">Auto</span>
-                                    )}
+                        <div className="space-y-3.5">
+                          {filteredInfluencers.filter(inf => (inf.status || 'inbox') === col).map(inf => {
+                            const cardKey = inf.id || inf.name;
+                            const isExpanded = expandedCardId === cardKey;
+                            return (
+                              <div
+                                key={cardKey}
+                                onClick={() => setExpandedCardId(prev => prev === cardKey ? null : cardKey)}
+                                title="Click to toggle full name and details"
+                                className={`bg-white rounded-2xl border shadow-sm p-5 hover:shadow-md transition-all relative group cursor-pointer ${
+                                  isExpanded
+                                    ? 'border-indigo-300 ring-2 ring-indigo-500/15 shadow-md'
+                                    : 'border-gray-200/90 hover:border-indigo-200'
+                                }`}
+                              >
+                                <div className="flex items-start gap-3.5 mb-2.5">
+                                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-base shrink-0">
+                                    {inf.name.charAt(0)}
                                   </div>
-                                  <div className="mt-1 flex items-center gap-1.5">
-                                    <Building2 className="w-3 h-3 text-gray-400 shrink-0" />
-                                    <input
-                                      type="text"
-                                      placeholder="Add Company..."
-                                      defaultValue={inf.companyName || ''}
-                                      onBlur={(e) => handleUpdateStatus(inf, inf.status || 'inbox', e.target.value)}
-                                      className="text-[11px] text-gray-600 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none placeholder:text-gray-300 w-full"
-                                    />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <h4
+                                        className={`font-semibold text-[15px] leading-snug text-gray-900 ${
+                                          isExpanded ? 'whitespace-normal break-words text-indigo-950' : 'truncate'
+                                        }`}
+                                      >
+                                        {inf.name}
+                                      </h4>
+                                      {inf.source === 'auto' && (
+                                        <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-bold uppercase tracking-wide shrink-0 mt-0.5">
+                                          Auto
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="mt-1.5 flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                      <Building2 className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                                      <input
+                                        type="text"
+                                        placeholder="Add Company..."
+                                        defaultValue={inf.companyName || ''}
+                                        onBlur={(e) => handleUpdateStatus(inf, inf.status || 'inbox', e.target.value)}
+                                        className="text-xs text-gray-600 bg-transparent border-b border-transparent hover:border-gray-300 focus:border-indigo-500 focus:outline-none placeholder:text-gray-300 w-full"
+                                      />
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
 
-                              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                                <select
-                                  value={inf.status || 'inbox'}
-                                  onChange={(e) => handleUpdateStatus(inf, e.target.value)}
-                                  className="text-[11px] font-medium bg-gray-50 border border-gray-200 text-gray-600 rounded-md px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                                {isExpanded && inf.headline && (
+                                  <p className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-600 leading-relaxed break-words">
+                                    {inf.headline}
+                                  </p>
+                                )}
+
+                                <div
+                                  className="flex items-center justify-between gap-2 mt-3.5 pt-3 border-t border-gray-100"
+                                  onClick={(e) => e.stopPropagation()}
                                 >
-                                  <option value="inbox">To Inbox</option>
-                                  <option value="cold">To Cold</option>
-                                  <option value="engaged">To Engaged</option>
-                                  <option value="connected">To Connected</option>
-                                </select>
+                                  <select
+                                    value={inf.status || 'inbox'}
+                                    onChange={(e) => handleUpdateStatus(inf, e.target.value)}
+                                    className="text-xs font-medium bg-gray-50 border border-gray-200 text-gray-600 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer shrink-0"
+                                  >
+                                    <option value="inbox">To Inbox</option>
+                                    <option value="cold">To Cold</option>
+                                    <option value="engaged">To Engaged</option>
+                                    <option value="connected">To Connected</option>
+                                  </select>
 
-                                <div className="flex items-center gap-0.5">
-                                  <button onClick={() => setSelectedInfluencer(inf)} className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Message Studio">
-                                    <MessageSquare className="w-3.5 h-3.5" />
-                                  </button>
-                                  <button onClick={() => handleLogEngagement(inf)} className="p-1 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors" title="Log Engagement">
-                                    <Check className="w-3.5 h-3.5" />
-                                  </button>
-                                  <a href={inf.linkedinUrl} target="_blank" rel="noopener noreferrer" className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors">
-                                    <ExternalLink className="w-3.5 h-3.5" />
-                                  </a>
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    <button
+                                      onClick={() => setInviteInfluencer(inf)}
+                                      className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                      title="Generate Connection Invite"
+                                    >
+                                      <UserPlus className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => setSelectedInfluencer(inf)}
+                                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                      title="Comment Studio"
+                                    >
+                                      <MessageSquare className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleLogEngagement(inf)}
+                                      className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                      title="Log Engagement"
+                                    >
+                                      <Check className="w-4 h-4" />
+                                    </button>
+                                    <a
+                                      href={inf.linkedinUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                      title="Open LinkedIn Profile"
+                                    >
+                                      <ExternalLink className="w-4 h-4" />
+                                    </a>
+                                  </div>
                                 </div>
+                                {inf.lastEngagedAt && (
+                                  <div className="mt-2.5 text-[11px] text-gray-400 flex items-center gap-1">
+                                    <Clock className="w-3 h-3" />
+                                    Last engaged: {new Date(inf.lastEngagedAt).toLocaleDateString()}
+                                  </div>
+                                )}
                               </div>
-                              {inf.lastEngagedAt && (
-                                <div className="mt-2 text-[10px] text-gray-400 flex items-center gap-1">
-                                  <Clock className="w-3 h-3" />
-                                  Last engaged: {new Date(inf.lastEngagedAt).toLocaleDateString()}
-                                </div>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -836,14 +1222,23 @@ export default function InfluencersPage() {
                           </span>
                         </div>
                         <div className="p-4 flex-1 space-y-3">
-                          {employees.map(inf => (
-                            <div key={inf.id} className="flex items-center justify-between group">
+                          {employees.map(inf => {
+                            const cardKey = `acct-${inf.id || inf.name}`;
+                            const isExpanded = expandedCardId === cardKey;
+                            return (
+                            <div
+                              key={cardKey}
+                              onClick={() => setExpandedCardId(prev => prev === cardKey ? null : cardKey)}
+                              className="flex items-center justify-between group cursor-pointer p-1.5 -mx-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
                               <div className="flex items-center gap-3 min-w-0">
                                 <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-xs shrink-0">
                                   {inf.name.charAt(0)}
                                 </div>
                                 <div className="min-w-0">
-                                  <h4 className="text-sm font-medium text-gray-900 truncate pr-2">{inf.name}</h4>
+                                  <h4 className={`text-sm font-medium text-gray-900 pr-2 ${isExpanded ? 'whitespace-normal break-words' : 'truncate'}`}>
+                                    {inf.name}
+                                  </h4>
                                   <span className={`text-[10px] font-medium capitalize px-1.5 py-0.5 rounded-full ${
                                     inf.status === 'connected' ? 'bg-green-50 text-green-600' :
                                     inf.status === 'engaged' ? 'bg-orange-50 text-orange-600' :
@@ -852,7 +1247,10 @@ export default function InfluencersPage() {
                                   }`}>{inf.status || 'inbox'}</span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" onClick={(e) => e.stopPropagation()}>
+                                <button onClick={() => setInviteInfluencer(inf)} className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="Generate Connection Invite">
+                                  <UserPlus className="w-3.5 h-3.5" />
+                                </button>
                                 <button onClick={() => setSelectedInfluencer(inf)} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors" title="Comment Studio">
                                   <MessageSquare className="w-3.5 h-3.5" />
                                 </button>
@@ -861,7 +1259,8 @@ export default function InfluencersPage() {
                                 </a>
                               </div>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </div>
                     ))}
@@ -876,6 +1275,15 @@ export default function InfluencersPage() {
       {/* Comment Drawer */}
       {selectedInfluencer && (
         <CommentDrawer influencer={selectedInfluencer} onClose={() => setSelectedInfluencer(null)} />
+      )}
+
+      {/* Connection Invite Drawer */}
+      {inviteInfluencer && (
+        <InviteDrawer
+          influencer={inviteInfluencer}
+          onClose={() => setInviteInfluencer(null)}
+          onLogInvite={handleLogInvite}
+        />
       )}
     </div>
   );

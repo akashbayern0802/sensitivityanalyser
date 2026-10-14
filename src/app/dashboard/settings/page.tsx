@@ -175,7 +175,7 @@ function LinkedInImport({ onImportSuccess }: LinkedInImportProps) {
 
 const PROVIDER_MODELS: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini'],
-  gemini: ['gemini-3.8-flash', 'gemini-3.1-flash-preview', 'gemini-3.1-pro-preview'],
+  gemini: ['gemini-4-argon', 'gemini-3.8-flash', 'gemini-3.1-flash-preview', 'gemini-3.1-pro-preview'],
   claude: ['claude-sonnet-4-20250514', 'claude-3-5-haiku-20241022'],
   groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768'],
   'bedrock-mantle': [
@@ -194,10 +194,10 @@ const PROVIDER_MODELS: Record<string, string[]> = {
     'meta.llama3-1-70b-instruct-v1:0',
   ],
   'google-vertex': [
-    'gemini-3.8-flash',
+    'gemini-4-argon',
     'gemini-3.8-flash',
     'gemini-3.1-pro-preview',
-    'gemini-3.8-flash',
+    'gemini-3.1-flash-preview',
   ],
   ollama: ['llama3.2', 'mistral', 'qwen2.5', 'deepseek-r1']
 };

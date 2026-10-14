@@ -243,7 +243,9 @@ function ContentStudioContent() {
       apiKey: localStorage.getItem(`sa_apiKey_${provider}`) || '',
       awsSecretKey: provider === 'amazon-bedrock' ? (localStorage.getItem('sa_awsSecretKey_amazon-bedrock') || '') : '',
       ollamaBaseUrl: localStorage.getItem('sa_baseUrl') || '',
-      bedrockRegion: localStorage.getItem('sa_region') || ''
+      bedrockRegion: localStorage.getItem('sa_region') || '',
+      vertexProjectId: localStorage.getItem('sa_vertexProjectId') || 'sensitivity-analyser',
+      vertexRegion: localStorage.getItem('sa_vertexRegion') || 'global',
     };
   };
 

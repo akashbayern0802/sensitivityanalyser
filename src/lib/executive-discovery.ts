@@ -25,7 +25,9 @@ export interface DiscoveredExecutive {
 export function buildAiClient(): GoogleGenAI {
   const apiKey = process.env.GOOGLE_VERTEX_API_KEY;
   if (!apiKey) throw new Error('GOOGLE_VERTEX_API_KEY is not set.');
-  return new GoogleGenAI({ vertexai: true, apiKey });
+  const project = process.env.GOOGLE_VERTEX_PROJECT || process.env.GOOGLE_VERTEX_PROJECT_ID || 'sensitivity-analyser';
+  const location = process.env.GOOGLE_VERTEX_LOCATION || process.env.GOOGLE_VERTEX_REGION || 'global';
+  return new GoogleGenAI({ vertexai: true, apiKey, project, location });
 }
 
 function extractJsonArray(rawText: string): DiscoveredExecutive[] | null {

@@ -149,6 +149,8 @@ function CommentDrawer({
       apiKey: localStorage.getItem(`sa_apiKey_${provider}`) || '',
       ollamaBaseUrl: localStorage.getItem('sa_baseUrl') || '',
       bedrockRegion: localStorage.getItem('sa_region') || '',
+      vertexProjectId: localStorage.getItem('sa_vertexProjectId') || 'sensitivity-analyser',
+      vertexRegion: localStorage.getItem('sa_vertexRegion') || 'global',
     };
   };
 
@@ -313,6 +315,8 @@ function InviteDrawer({
       apiKey: localStorage.getItem(`sa_apiKey_${provider}`) || '',
       ollamaBaseUrl: localStorage.getItem('sa_baseUrl') || '',
       bedrockRegion: localStorage.getItem('sa_region') || '',
+      vertexProjectId: localStorage.getItem('sa_vertexProjectId') || 'sensitivity-analyser',
+      vertexRegion: localStorage.getItem('sa_vertexRegion') || 'global',
     };
   };
 

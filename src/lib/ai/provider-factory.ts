@@ -3,7 +3,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createVertex } from '@ai-sdk/google-vertex';
-import { LanguageModel } from 'ai';
+import type { LanguageModel } from 'ai';
 
 export type LLMProvider = 'openai' | 'gemini' | 'claude' | 'groq' | 'bedrock-mantle' | 'ollama' | 'amazon-bedrock' | 'google-vertex';
 
@@ -14,6 +14,8 @@ export type ModelConfig = {
   ollamaBaseUrl?: string;
   bedrockRegion?: string;
   awsSecretKey?: string;
+  vertexProjectId?: string;
+  vertexRegion?: string;
 };
 
 export const PROVIDER_MODELS: Record<LLMProvider, string[]> = {
@@ -233,13 +235,31 @@ export function resolveLanguageModel(config: ModelConfig): LanguageModel {
     }
     case 'google-vertex': {
       const vertexApiKey = apiKey || process.env.GOOGLE_VERTEX_API_KEY;
-      const project = process.env.GOOGLE_VERTEX_PROJECT_ID;
-      const location = bedrockRegion || process.env.GOOGLE_VERTEX_REGION || 'us-central1';
+      const project =
+        config.vertexProjectId ||
+        process.env.GOOGLE_VERTEX_PROJECT ||
+        process.env.GOOGLE_VERTEX_PROJECT_ID ||
+        'sensitivity-analyser';
+
+      // Gemini 4 Argon runs on Google's global routing endpoint
+      let location =
+        config.vertexRegion ||
+        process.env.GOOGLE_VERTEX_LOCATION ||
+        process.env.GOOGLE_VERTEX_REGION ||
+        'global';
+
+      if (modelId === 'gemini-4-argon' && (!config.vertexRegion || config.vertexRegion === 'asia-southeast1')) {
+        location = 'global';
+      }
+
+      const host = location === 'global' ? 'aiplatform.googleapis.com' : `${location}-aiplatform.googleapis.com`;
+      const baseURL = `https://${host}/v1beta1/projects/${project}/locations/${location}/publishers/google`;
 
       const vertex = createVertex({
         apiKey: vertexApiKey,
         project,
         location,
+        baseURL,
       });
       return vertex(modelId);
     }

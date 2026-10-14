@@ -213,6 +213,8 @@ export default function SettingsPage() {
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('http://localhost:11434/v1');
   const [region, setRegion] = useState('us-east-1');
+  const [vertexProjectId, setVertexProjectId] = useState('sensitivity-analyser');
+  const [vertexRegion, setVertexRegion] = useState('global');
   const [awsSecretKey, setAwsSecretKey] = useState('');
   const [showAwsSecretKey, setShowAwsSecretKey] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
@@ -294,6 +296,8 @@ export default function SettingsPage() {
       }
       setBaseUrl(localStorage.getItem('sa_baseUrl') || 'http://localhost:11434/v1');
       setRegion(localStorage.getItem('sa_region') || 'us-east-1');
+      setVertexProjectId(localStorage.getItem('sa_vertexProjectId') || 'sensitivity-analyser');
+      setVertexRegion(localStorage.getItem('sa_vertexRegion') || 'global');
 // Loaded from API above
 
       setScanMode(localStorage.getItem('sa_scanMode') || 'manual');
@@ -362,6 +366,8 @@ export default function SettingsPage() {
     }
     localStorage.setItem('sa_baseUrl', baseUrl);
     localStorage.setItem('sa_region', region);
+    localStorage.setItem('sa_vertexProjectId', vertexProjectId);
+    localStorage.setItem('sa_vertexRegion', vertexRegion);
     
     localStorage.setItem('sa_name', name);
     localStorage.setItem('sa_linkedinUrl', linkedinUrl);
@@ -464,8 +470,32 @@ export default function SettingsPage() {
         setTestMessage('Network error connecting to OpenAI API.');
       }
     } else if (provider === 'google-vertex') {
-      setTestStatus('success');
-      setTestMessage('Google Vertex AI configured. Ready using ' + (apiKey.trim() ? 'entered API key' : 'GOOGLE_VERTEX_API_KEY from .env') + '.');
+      setTestStatus('testing');
+      setTestMessage('Testing live connection to Google Vertex AI...');
+      try {
+        const res = await fetch('/api/settings/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider: 'google-vertex',
+            modelId: model,
+            apiKey: apiKey.trim() || undefined,
+            vertexProjectId: vertexProjectId.trim() || 'sensitivity-analyser',
+            vertexRegion: vertexRegion.trim() || 'global',
+          }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setTestStatus('success');
+          setTestMessage(data.message || 'Connected successfully to Google Vertex AI!');
+        } else {
+          setTestStatus('failed');
+          setTestMessage(data.error || 'Connection to Google Vertex AI failed.');
+        }
+      } catch (err: any) {
+        setTestStatus('failed');
+        setTestMessage('Network error: ' + err.message);
+      }
     } else {
       // Fallback for others
       setTestStatus('success');
@@ -662,6 +692,52 @@ export default function SettingsPage() {
                   />
                 </div>
               </div>
+            )}
+
+            {provider === 'google-vertex' && (
+              <>
+                <div className="sm:col-span-3">
+                  <label htmlFor="vertexProjectId" className="block text-sm font-medium leading-6 text-gray-900">
+                    Google Cloud Project ID
+                  </label>
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      id="vertexProjectId"
+                      value={vertexProjectId}
+                      onChange={(e) => setVertexProjectId(e.target.value)}
+                      placeholder="sensitivity-analyser"
+                      className="block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                    />
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Your GCP project ID with Vertex AI enabled (e.g. <code className="bg-gray-100 px-1 py-0.5 rounded text-gray-800">sensitivity-analyser</code>).
+                  </p>
+                </div>
+
+                <div className="sm:col-span-3">
+                  <label htmlFor="vertexRegion" className="block text-sm font-medium leading-6 text-gray-900">
+                    Vertex Location / Region
+                  </label>
+                  <div className="mt-2">
+                    <select
+                      id="vertexRegion"
+                      value={vertexRegion}
+                      onChange={(e) => setVertexRegion(e.target.value)}
+                      className="block w-full rounded-md border-0 py-1.5 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
+                    >
+                      <option value="global">global (Required for Gemini 4 Argon)</option>
+                      <option value="us-central1">us-central1 (Iowa)</option>
+                      <option value="asia-southeast1">asia-southeast1 (Singapore)</option>
+                      <option value="europe-west1">europe-west1 (Belgium)</option>
+                      <option value="us-east4">us-east4 (N. Virginia)</option>
+                    </select>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Gemini 4 Argon is routed via Google&apos;s global endpoint (<code className="bg-gray-100 px-1 py-0.5 rounded text-gray-800">global</code>).
+                  </p>
+                </div>
+              </>
             )}
           </div>
           <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-4">

@@ -22,12 +22,14 @@ export function KnowledgeVaultManager() {
   const [isIndexingRadar, setIsIndexingRadar] = useState(false);
   const [vaultMessage, setVaultMessage] = useState('');
   const [vaultStatus, setVaultStatus] = useState('');
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   const loadVaultItems = useCallback(async () => {
     try {
-      const [itemsRes, statusRes] = await Promise.all([
+      const [itemsRes, statusRes, auditRes] = await Promise.all([
         fetch('/api/vault/items'),
         fetch('/api/vault/ingest'),
+        fetch('/api/vault/audit?limit=10'),
       ]);
       const itemsData = await itemsRes.json();
       if (itemsData.success && itemsData.items) {
@@ -36,6 +38,10 @@ export function KnowledgeVaultManager() {
       const statusData = await statusRes.json();
       if (statusData.success) {
         setRadarChunksIndexed(statusData.radarChunksIndexed || 0);
+      }
+      const auditData = await auditRes.json();
+      if (auditData.success && auditData.logs) {
+        setAuditLogs(auditData.logs);
       }
     } catch (e) {
       console.error('Failed to load vault items:', e);
@@ -278,6 +284,67 @@ export function KnowledgeVaultManager() {
             </div>
           )}
         </div>
+
+        {/* Hallucination Audit Logs (Faithfulness Scores) */}
+        {auditLogs.length > 0 && (
+          <div className="border-t border-gray-100 pt-5">
+            <div className="flex items-center justify-between mb-3">
+              <h4 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                Recent Hallucination Audit Logs ({auditLogs.length})
+              </h4>
+              <span className="text-xs text-gray-500">Live Faithfulness Scoring</span>
+            </div>
+
+            <div className="space-y-2">
+              {auditLogs.map((log: any) => (
+                <div key={log.id} className="p-3 bg-gray-50 rounded-xl border border-gray-200 text-xs space-y-1.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full font-semibold ${
+                        log.faithfulnessScore >= 0.95 ? 'bg-emerald-100 text-emerald-800' :
+                        log.faithfulnessScore >= 0.7 ? 'bg-amber-100 text-amber-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        Faithfulness: {Math.round(log.faithfulnessScore * 100)}%
+                      </span>
+                      <span className="px-2 py-0.5 rounded-full bg-gray-200 text-gray-700 uppercase font-medium text-[10px]">
+                        {log.generationType}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                        log.status === 'passed' ? 'bg-emerald-50 text-emerald-700' :
+                        log.status === 'remediated' ? 'bg-amber-50 text-amber-700' :
+                        'bg-red-50 text-red-700'
+                      }`}>
+                        Status: {log.status}
+                      </span>
+                    </div>
+                    <span className="text-gray-400 text-[11px]">
+                      {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+
+                  <p className="text-gray-600 line-clamp-1 italic">
+                    &quot;{log.outputSnippet}&quot;
+                  </p>
+
+                  {Array.isArray(log.flaggedClaims) && log.flaggedClaims.length > 0 && (
+                    <div className="pt-1">
+                      <p className="text-[11px] font-medium text-red-600">
+                        {log.flaggedClaims.length} unverified claim(s) flagged/stripped by critic:
+                      </p>
+                      <ul className="list-disc list-inside text-gray-500 text-[10px] pl-1">
+                        {log.flaggedClaims.slice(0, 2).map((claim: string, idx: number) => (
+                          <li key={idx} className="truncate">{claim}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </section>
   );

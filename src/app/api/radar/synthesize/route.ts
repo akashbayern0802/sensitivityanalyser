@@ -111,7 +111,7 @@ Constraints:
           source: event.target.name,
         };
 
-        const criticResult = await runNLICritic(draftResult, [pseudoChunk], true);
+        const criticResult = await runNLICritic(draftResult, [pseudoChunk], false);
         finalDraft = criticResult.cleanedText;
         faithfulnessScore = criticResult.faithfulnessScore;
         criticStatus = criticResult.status;

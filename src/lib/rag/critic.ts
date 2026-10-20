@@ -100,14 +100,14 @@ A sentence is UNSUPPORTED if it makes a claim not found in the source context.`;
     const { text: judgement } = await generateText({
       model,
       prompt,
-      maxOutputTokens: 400,
+      maxOutputTokens: 1500,
       temperature: 0,
     });
 
     const flagged: string[] = [];
     candidateSentences.forEach((sentence, i) => {
-      const match = judgement.match(new RegExp(`S${i + 1}:\\s*(SUPPORTED|UNSUPPORTED)`));
-      const verdict = match ? match[1] : 'SUPPORTED';
+      const match = judgement.match(new RegExp(`(?:\\*\\*)?S${i + 1}:?(?:\\*\\*)?\\s*(SUPPORTED|UNSUPPORTED)`, 'i'));
+      const verdict = match ? match[1].toUpperCase() : 'SUPPORTED';
       if (verdict === 'UNSUPPORTED') {
         flagged.push(sentence);
       }

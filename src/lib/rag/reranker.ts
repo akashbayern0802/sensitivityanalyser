@@ -38,11 +38,12 @@ Score 0.0 = completely irrelevant, 1.0 = perfectly relevant. Be strict.`;
   try {
     const provider = process.env.GOOGLE_VERTEX_API_KEY ? ('google-vertex' as const) : ('gemini' as const);
     const model = resolveLanguageModel({ provider, modelId: 'gemini-3.8-flash' });
-    const { text } = await generateText({ model, prompt, maxOutputTokens: 200 });
+    const { text } = await generateText({ model, prompt, maxOutputTokens: 1500 });
+    console.log('[RAG Reranker] LLM response:', text.trim());
 
     const results: (RetrievedChunk & { relevanceScore: number })[] = [];
     chunks.forEach((chunk, i) => {
-      const match = text.match(new RegExp(`CHUNK_${i + 1}_SCORE:\\s*([0-9.]+)`));
+      const match = text.match(new RegExp(`(?:\\*\\*)?CHUNK[\\s_]?${i + 1}[\\s_]?SCORE:?(?:\\*\\*)?\\s*([0-9.]+)`, 'i'));
       const score = match ? parseFloat(match[1]) : 0;
       if (score >= threshold) {
         results.push({ ...chunk, relevanceScore: score });

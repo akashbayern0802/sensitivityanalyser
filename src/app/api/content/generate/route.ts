@@ -102,7 +102,7 @@ export async function POST(req: Request) {
 
     if (isGrounded && groundingChunks.length > 0) {
       try {
-        const criticResult = await runNLICritic(postBody, groundingChunks, true);
+        const criticResult = await runNLICritic(postBody, groundingChunks, false);
         postBody = criticResult.cleanedText;
         faithfulnessScore = criticResult.faithfulnessScore;
         flaggedClaims = criticResult.flaggedClaims;

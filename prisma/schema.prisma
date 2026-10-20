@@ -243,3 +243,41 @@ model BroadcastLog {
   channel DistributionChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
 }
 
+
+model KnowledgeVaultItem {
+  id        String   @id @default(cuid())
+  userId    String   @default("user_mock_id")
+  title     String
+  category  String   // 'career_history' | 'technical_framework' | 'case_study' | 'verified_post'
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  chunks    KnowledgeChunk[]
+}
+
+model KnowledgeChunk {
+  id            String   @id @default(cuid())
+  vaultItemId   String?
+  radarEventId  String?
+  content       String
+  chunkIndex    Int
+  tokenCount    Int
+  metadata      String   @default("{}")  // JSON: source, url, date
+  embedding     String?  // JSON stringified float[]
+  vaultItem     KnowledgeVaultItem? @relation(fields: [vaultItemId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  @@index([vaultItemId])
+  @@index([radarEventId])
+}
+
+model HallucinationAuditLog {
+  id               String   @id @default(cuid())
+  generationType   String   // 'post' | 'comment' | 'radar_post'
+  outputSnippet    String
+  faithfulnessScore Float
+  flaggedClaims    String   @default("[]")
+  chunksReferenced String   @default("[]")
+  status           String   // 'passed' | 'remediated' | 'rejected'
+  createdAt        DateTime @default(now())
+}

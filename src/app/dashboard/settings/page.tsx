@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Eye, EyeOff, UploadCloud, X, Save, CheckCircle2, AlertCircle, Loader2, FileText } from 'lucide-react';
 import { DistributionChannelsManager } from './distribution-channels';
+import { KnowledgeVaultManager } from './knowledge-vault';
 
 // ─── LinkedIn CSV Import component ───────────────────────────────────────────
 
@@ -1002,6 +1003,9 @@ export default function SettingsPage() {
         </div>
       </section>
       
+      {/* Anti-Hallucination Knowledge Vault (RAG) */}
+      <KnowledgeVaultManager />
+
       {/* Distribution Channels & Community Webhooks */}
       <DistributionChannelsManager />
 

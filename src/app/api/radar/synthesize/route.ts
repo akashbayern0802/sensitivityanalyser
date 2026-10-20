@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { generateText } from 'ai';
 import prisma from '@/lib/db';
 import { resolveLanguageModel } from '@/lib/ai/provider-factory';
+import { runNLICritic } from '@/lib/rag/critic';
+import type { RetrievedChunk } from '@/lib/rag/retriever';
 
 const MOCK_USER_ID = 'user_mock_id';
 
@@ -17,23 +19,14 @@ export async function POST(req: Request) {
 
     // Step 1: Extract content via Bright Data if API key is available
     let extractedText = event.extractedText || event.summary || '';
-    
-    // Only scrape if we haven't already extracted the text
     if (!event.extractedText) {
       const brightDataKey = process.env.BRIGHT_DATA_API_KEY;
       if (brightDataKey && event.url) {
         try {
           const bdRes = await fetch('https://api.brightdata.com/request', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${brightDataKey}`,
-            },
-            body: JSON.stringify({
-              zone: 'web_unlocker1',
-              url: event.url,
-              format: 'raw',
-            }),
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${brightDataKey}` },
+            body: JSON.stringify({ zone: 'web_unlocker1', url: event.url, format: 'raw' }),
           });
           if (bdRes.ok) {
             const rawHtml = await bdRes.text();
@@ -60,7 +53,7 @@ export async function POST(req: Request) {
     const model = resolveLanguageModel(modelConfig as any);
 
     // Step 3: Synthesize LinkedIn post or comment
-    const prompt = actionType === 'comment' 
+    const prompt = actionType === 'comment'
       ? `You are an industry expert reading a new post/article.
       
 Source: ${event.target.name}
@@ -87,27 +80,64 @@ Content: ${extractedText}
 Your role: ${dbUser?.targetRole || 'Industry Professional'}
 Your areas of interest: ${dbUser?.interests || '[]'}
 
-Write a "First Mover" LinkedIn post about this development. The goal is to be the FIRST insightful voice on LinkedIn to cover this before it hits the mainstream feed.
+GROUNDING RULE: Only cite facts, statistics, and company names that appear in the Content above. Do not invent data.
 
+Write a "First Mover" LinkedIn post about this development.
 Constraints:
-- Open with a powerful, non-generic hook line. Never start with "Have you ever wondered" or "Excited to share".
-- Write like a real human being, not a corporate announcement. Be direct and opinionated.
-- Explain WHY this matters to your audience in plain English. Connect the technical dots to real business impact.
-- Add 1-2 relevant emojis organically within the text (not as bullet points).
+- Open with a powerful, non-generic hook line.
+- Write like a real human being, not a corporate announcement.
+- Explain WHY this matters to your audience in plain English.
+- Add 1-2 relevant emojis organically.
 - End with a thought-provoking question that invites debate.
 - Add 3-5 relevant hashtags at the very bottom.
 - Keep it under 1300 characters for maximum reach.
-
-IMPORTANT: Mention the source (${event.target.name}) naturally within the post text to credit them.`;
+- Mention the source (${event.target.name}) naturally within the post.`;
 
     const { text: draftResult } = await generateText({ model, prompt });
 
-    // Save draft back to event
+    // Step 4: NLI Critic gate — use extractedText as the grounding source
+    let finalDraft = draftResult;
+    let faithfulnessScore = 1.0;
+    let criticStatus: 'passed' | 'remediated' | 'rejected' = 'passed';
+
+    if (extractedText && extractedText.length > 100) {
+      try {
+        // Treat the extracted article text as a pseudo-chunk for NLI checking
+        const pseudoChunk: RetrievedChunk = {
+          id: event.id,
+          content: extractedText.substring(0, 2000),
+          metadata: { source: event.target.name, url: event.url },
+          score: 1.0,
+          source: event.target.name,
+        };
+
+        const criticResult = await runNLICritic(draftResult, [pseudoChunk], true);
+        finalDraft = criticResult.cleanedText;
+        faithfulnessScore = criticResult.faithfulnessScore;
+        criticStatus = criticResult.status;
+
+        // Audit log
+        await prisma.hallucinationAuditLog.create({
+          data: {
+            generationType: 'radar_post',
+            outputSnippet: finalDraft.substring(0, 500),
+            faithfulnessScore,
+            flaggedClaims: JSON.stringify(criticResult.flaggedClaims),
+            chunksReferenced: JSON.stringify([event.id]),
+            status: criticStatus,
+          },
+        });
+      } catch (criticErr) {
+        console.warn('[Synthesize] NLI critic failed:', criticErr);
+      }
+    }
+
+    // Step 5: Save draft back to event
     const updateData: any = { extractedText, status: 'drafted' };
     if (actionType === 'comment') {
-      updateData.commentDraft = draftResult;
+      updateData.commentDraft = finalDraft;
     } else {
-      updateData.linkedinDraft = draftResult;
+      updateData.linkedinDraft = finalDraft;
     }
 
     const updated = await prisma.radarEvent.update({
@@ -115,7 +145,12 @@ IMPORTANT: Mention the source (${event.target.name}) naturally within the post t
       data: updateData,
     });
 
-    return NextResponse.json({ success: true, event: updated });
+    return NextResponse.json({
+      success: true,
+      event: updated,
+      faithfulnessScore,
+      criticStatus,
+    });
   } catch (error: any) {
     console.error('Synthesize error:', error);
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

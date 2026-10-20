@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send } from 'lucide-react';
+import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send, ShieldCheck, AlertTriangle } from 'lucide-react';
 
 function ContentStudioContent() {
   const searchParams = useSearchParams();
@@ -33,6 +33,10 @@ function ContentStudioContent() {
   const [alignmentFeedback, setAlignmentFeedback] = useState<string[]>([]);
   const [alignmentSuggestion, setAlignmentSuggestion] = useState('');
   const [isCheckingAlignment, setIsCheckingAlignment] = useState(false);
+
+  // RAG Grounding State
+  const [groundingData, setGroundingData] = useState<any>(null);
+  const [expandedChunk, setExpandedChunk] = useState<number | null>(null);
 
   // Syndication & Launchpad State (Phase 1)
   const [syndication, setSyndication] = useState<{
@@ -195,6 +199,9 @@ function ContentStudioContent() {
       }
       const data = await response.json();
       setPostBody(data.rewrittenBody || '');
+      if (data.groundingData) {
+        setGroundingData((prev: any) => ({ ...prev, ...data.groundingData }));
+      }
       setFeedback('');
     } catch (err: any) {
       setError(err.message || 'An error occurred during rewrite');
@@ -279,6 +286,8 @@ function ContentStudioContent() {
       const data = await response.json();
       setPostBody(data.draft?.body || data.content || '');
       setImagePrompt(data.draft?.imagePrompt || data.imagePrompt || '');
+      setGroundingData(data.groundingData || null);
+      setExpandedChunk(null);
 
       // Parse carousel slides if format is carousel
       if (format.toLowerCase().includes('carousel') || format.toLowerCase().includes('slide')) {
@@ -613,6 +622,79 @@ function ContentStudioContent() {
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-y transition-shadow"
                     placeholder="Write or edit your post here..."
                   />
+
+                  {/* RAG Grounding Attribution Badges & Citation Chips */}
+                  {groundingData?.isGrounded && (
+                    <div className="mt-3 p-3.5 bg-emerald-50/60 border border-emerald-200 rounded-xl space-y-2.5">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${
+                            groundingData.faithfulnessScore >= 0.95 ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                            groundingData.faithfulnessScore >= 0.8 ? 'bg-amber-100 text-amber-800 border border-amber-300' :
+                            'bg-red-100 text-red-800 border border-red-300'
+                          }`}>
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            ✓ Grounded: {Math.round((groundingData.faithfulnessScore ?? 1) * 100)}% Verified
+                          </div>
+                          {groundingData.status === 'remediated' && (
+                            <span className="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                              ⚠️ {groundingData.flaggedClaims?.length || 1} unverified claim(s) stripped by NLI Critic
+                            </span>
+                          )}
+                        </div>
+                        <Link href="/dashboard/settings" className="text-[11px] text-emerald-700 hover:underline font-medium">
+                          Manage Knowledge Vault →
+                        </Link>
+                      </div>
+
+                      {groundingData.chunks?.length > 0 && (
+                        <div>
+                          <p className="text-[11px] font-medium text-gray-600 mb-1.5">Verified Source Citations (click to inspect):</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {groundingData.chunks.map((chunk: any, i: number) => (
+                              <button
+                                key={chunk.id || i}
+                                type="button"
+                                onClick={() => setExpandedChunk(expandedChunk === i ? null : i)}
+                                className={`px-2.5 py-1 text-xs rounded-lg border transition-colors font-medium ${
+                                  expandedChunk === i
+                                    ? 'bg-indigo-600 text-white border-indigo-600'
+                                    : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+                                }`}
+                              >
+                                [Chunk-{i + 1}: {chunk.source}]
+                              </button>
+                            ))}
+                          </div>
+                          {expandedChunk !== null && groundingData.chunks[expandedChunk] && (
+                            <div className="mt-2 p-3 bg-white border border-indigo-200 rounded-lg shadow-xs">
+                              <div className="flex items-center justify-between text-[11px] text-indigo-600 font-semibold mb-1">
+                                <span>Source: {groundingData.chunks[expandedChunk].source}</span>
+                                {groundingData.chunks[expandedChunk].relevanceScore && (
+                                  <span>Relevance: {Math.round(groundingData.chunks[expandedChunk].relevanceScore * 100)}%</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-700 font-mono whitespace-pre-wrap">
+                                {groundingData.chunks[expandedChunk].snippet}...
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {groundingData && !groundingData.isGrounded && (
+                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between gap-3">
+                      <p className="text-xs text-amber-800 flex items-center gap-1.5">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <span>{groundingData.message || 'Add your career dossier or case studies to the Knowledge Vault in Settings to enable 98%+ verified generation.'}</span>
+                      </p>
+                      <Link href="/dashboard/settings" className="text-xs font-semibold text-indigo-600 hover:underline shrink-0">
+                        Open Vault →
+                      </Link>
+                    </div>
+                  )}
                 </div>
 
                 {/* Error Banner */}

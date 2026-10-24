@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send, ShieldCheck, AlertTriangle, Zap, Smartphone, Monitor } from 'lucide-react';
 
 function ContentStudioContent() {
   const searchParams = useSearchParams();
@@ -37,6 +37,98 @@ function ContentStudioContent() {
   // RAG Grounding State
   const [groundingData, setGroundingData] = useState<any>(null);
   const [expandedChunk, setExpandedChunk] = useState<number | null>(null);
+
+  // 3-Hook A/B Scorer & Fold/Penalty Simulator State
+  const [scoredHooks, setScoredHooks] = useState<Array<{
+    id: string;
+    archetype: string;
+    text: string;
+    score: number;
+    breakdown: {
+      foldScore: number;
+      vaultScore: number;
+      curiosityScore: number;
+      fitsMobileFold: boolean;
+      hasOpenLoop: boolean;
+      noCliches: boolean;
+    };
+    isVerified: boolean;
+    faithfulnessScore: number;
+    flaggedClaims: string[];
+    verifiedSources: string[];
+  }>>([]);
+  const [allowedMetrics, setAllowedMetrics] = useState<string[]>([]);
+  const [activeHookId, setActiveHookId] = useState<string | null>(null);
+  const [isGeneratingHooks, setIsGeneratingHooks] = useState(false);
+  const [basePostRemainder, setBasePostRemainder] = useState<string | null>(null);
+  const [foldDevice, setFoldDevice] = useState<'mobile' | 'desktop'>('mobile');
+  const [previewAuthorName, setPreviewAuthorName] = useState('Your Name');
+  const [previewAuthorHeadline, setPreviewAuthorHeadline] = useState('Senior Tech & Product Leader');
+
+  useEffect(() => {
+    const savedName = localStorage.getItem('sa_name');
+    const savedRole = localStorage.getItem('sa_targetRole');
+    if (savedName) setPreviewAuthorName(savedName);
+    if (savedRole) setPreviewAuthorHeadline(savedRole);
+  }, []);
+
+  const handleGenerateHooks = async () => {
+    if (!postBody.trim() && !topic.trim()) return;
+    setIsGeneratingHooks(true);
+    setError('');
+    try {
+      const config = getLLMConfig();
+      const res = await fetch('/api/content/hooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          postBody,
+          topic,
+          modelConfig: config,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate grounded hooks');
+      }
+      setScoredHooks(data.hooks || []);
+      setAllowedMetrics(data.allowedMetrics || []);
+      setActiveHookId(null);
+      const paras = postBody.trim().split(/\n\n+/);
+      if (paras.length > 2) {
+        const firstTwoLen = (paras[0]?.length || 0) + (paras[1]?.length || 0);
+        const remainder = firstTwoLen < 220 ? paras.slice(2).join('\n\n') : paras.slice(1).join('\n\n');
+        setBasePostRemainder(remainder);
+      } else if (paras.length === 2) {
+        setBasePostRemainder(paras[1]);
+      } else {
+        setBasePostRemainder(postBody.trim());
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to generate hooks');
+    } finally {
+      setIsGeneratingHooks(false);
+    }
+  };
+
+  const handleSwapHook = (hook: { id: string; text: string }) => {
+    setActiveHookId(hook.id);
+    const remainder =
+      basePostRemainder !== null
+        ? basePostRemainder
+        : postBody.trim().split(/\n\n+/).slice(1).join('\n\n');
+    setPostBody(remainder ? `${hook.text.trim()}\n\n${remainder}` : hook.text.trim());
+  };
+
+  const handleAutoSpaceParagraphs = () => {
+    if (!postBody.trim()) return;
+    const spaced = postBody
+      .split('\n')
+      .map(line => (line.length > 180 ? line.replace(/([.!?])\s+(?=[A-Z0-9])/g, '$1\n\n') : line))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n');
+    setPostBody(spaced);
+  };
 
   // Syndication & Launchpad State (Phase 1)
   const [syndication, setSyndication] = useState<{
@@ -704,6 +796,121 @@ function ContentStudioContent() {
                   </div>
                 )}
 
+                {/* ─── Hallucination-Guarded 3-Hook A/B Scorer ─── */}
+                <div className="bg-indigo-50/40 border border-indigo-200/80 rounded-xl p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Zap className="w-4 h-4 text-indigo-600" />
+                        <h3 className="text-sm font-bold text-gray-900">
+                          Hallucination-Guarded 3-Hook A/B Scorer
+                        </h3>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          NLI + Whitelist Locked
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Generates &amp; ranks 3 opening hook archetypes strictly locked to your Knowledge Vault metrics.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleGenerateHooks}
+                      disabled={isGeneratingHooks || (!postBody.trim() && !topic.trim())}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors shrink-0 shadow-xs"
+                    >
+                      {isGeneratingHooks ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Scoring 3 Hooks...</>
+                      ) : (
+                        <><Zap className="w-3.5 h-3.5" /> {scoredHooks.length > 0 ? 'Regenerate 3 Hooks' : 'Generate & Score 3 Hooks'}</>
+                      )}
+                    </button>
+                  </div>
+
+                  {allowedMetrics.length > 0 && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      <span className="text-xs font-medium text-gray-600">Locked Vault Metric Whitelist:</span>
+                      {allowedMetrics.map((m, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2 py-0.5 text-xs font-mono rounded bg-emerald-100/80 text-emerald-800 border border-emerald-300"
+                        >
+                          {m}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {scoredHooks.length > 0 && (
+                    <div className="space-y-2.5 pt-1">
+                      {scoredHooks.map((h) => {
+                        const isActive = activeHookId === h.id;
+                        return (
+                          <div
+                            key={h.id}
+                            onClick={() => handleSwapHook(h)}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer ${
+                              isActive
+                                ? 'border-indigo-600 bg-indigo-50/90 ring-1 ring-indigo-600'
+                                : 'border-gray-200 bg-white hover:border-indigo-300'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1.5 flex-wrap">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-bold text-gray-900">{h.archetype}</span>
+                                <span
+                                  className={`px-2 py-0.5 rounded-full text-xs font-bold ${
+                                    h.score >= 85
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                      : h.score >= 70
+                                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                      : 'bg-red-100 text-red-800 border border-red-300'
+                                  }`}
+                                >
+                                  Score: {h.score}/100
+                                </span>
+                                {h.isVerified ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <ShieldCheck className="w-3 h-3" /> 100% Vault-Verified
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                    Qualitative / Remediated
+                                  </span>
+                                )}
+                              </div>
+                              <span
+                                className={`text-xs font-semibold ${
+                                  isActive ? 'text-indigo-700' : 'text-indigo-600 hover:underline'
+                                }`}
+                              >
+                                {isActive ? '● Active in Post' : 'Swap into Post →'}
+                              </span>
+                            </div>
+
+                            <p className="text-xs text-gray-800 font-medium whitespace-pre-wrap leading-relaxed bg-gray-50/80 p-2.5 rounded-lg border border-gray-100">
+                              {h.text}
+                            </p>
+
+                            <div className="flex items-center justify-between flex-wrap gap-2 mt-2 text-xs text-gray-500">
+                              <span>
+                                Breakdown: <strong>Fold {h.breakdown.foldScore}/40</strong> ·{' '}
+                                <strong>Vault NLI {h.breakdown.vaultScore}/30</strong> ·{' '}
+                                <strong>Curiosity {h.breakdown.curiosityScore}/30</strong>
+                              </span>
+                              {h.verifiedSources?.length > 0 && (
+                                <span className="text-emerald-700 font-medium">
+                                  Source: {h.verifiedSources[0]}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
                 {/* AI Converse & Rewrite */}
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
                   <label className="block text-sm font-medium text-gray-700 flex items-center gap-2">
@@ -1123,53 +1330,218 @@ function ContentStudioContent() {
                 </div>
               </div>
 
-              {/* Preview Section */}
+              {/* Preview Section: Live Fold Simulator + 360 Brew Penalty & Dwell-Time Scanner */}
               <div className="lg:col-span-2">
-                <div className="sticky top-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center">
-                    <LayoutTemplate className="w-4 h-4 mr-2" />
-                    LinkedIn Preview
-                  </label>
-                  
-                  <div className="border border-gray-200 rounded-lg bg-white overflow-hidden shadow-sm">
-                    {/* Mock LinkedIn Header */}
-                    <div className="p-4 border-b border-gray-100 flex items-center gap-3">
-                      <div className="w-12 h-12 bg-gray-200 rounded-full flex-shrink-0"></div>
-                      <div>
-                        <div className="h-4 w-24 bg-gray-200 rounded mb-2"></div>
-                        <div className="h-3 w-32 bg-gray-100 rounded"></div>
+                <div className="sticky top-6 space-y-4">
+                  {/* Header + Mobile/Desktop Fold Toggle */}
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-semibold text-gray-800 flex items-center gap-1.5">
+                      <LayoutTemplate className="w-4 h-4 text-indigo-600" />
+                      Live Fold Simulator
+                    </label>
+                    <div className="inline-flex rounded-lg border border-gray-200 bg-gray-100 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setFoldDevice('mobile')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                          foldDevice === 'mobile'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Smartphone className="w-3.5 h-3.5" />
+                        Mobile (140c)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFoldDevice('desktop')}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold transition-all ${
+                          foldDevice === 'desktop'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-gray-600 hover:text-gray-900'
+                        }`}
+                      >
+                        <Monitor className="w-3.5 h-3.5" />
+                        Desktop (210c)
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* LinkedIn Feed Card with Exact Fold Cutoff */}
+                  <div className="border border-gray-200 rounded-xl bg-white overflow-hidden shadow-sm">
+                    {/* Author Header + 50-Char Headline Truncation */}
+                    <div className="p-3.5 border-b border-gray-100 flex items-start gap-3">
+                      <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-full flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
+                        {previewAuthorName
+                          .split(' ')
+                          .map((n) => n[0])
+                          .join('')
+                          .slice(0, 2)
+                          .toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-gray-900 truncate">{previewAuthorName}</div>
+                        <div className="text-[11px] text-gray-500 truncate">
+                          {previewAuthorHeadline.length > 50
+                            ? `${previewAuthorHeadline.slice(0, 50)}...`
+                            : previewAuthorHeadline}
+                        </div>
+                        <span className="inline-block mt-1 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          ✓ 50-Char Headline Hook Visible in Feed
+                        </span>
                       </div>
                     </div>
-                    
-                    {/* Mock LinkedIn Body */}
+
+                    {/* Fold Split Body */}
                     <div className="p-4">
                       {postBody ? (
-                        <div className="text-sm text-gray-800 whitespace-pre-wrap font-sans">
-                          {postBody.length > 200 ? (
-                            <>
-                              {postBody.substring(0, 200)}...
-                              <span className="text-gray-500 hover:text-blue-600 cursor-pointer block mt-1 font-medium">see more</span>
-                            </>
-                          ) : (
-                            postBody
-                          )}
-                        </div>
+                        (() => {
+                          const charLimit = foldDevice === 'mobile' ? 140 : 210;
+                          const aboveFold = postBody.slice(0, charLimit);
+                          const belowFold = postBody.slice(charLimit);
+                          return (
+                            <div className="text-xs text-gray-800 font-sans leading-relaxed">
+                              {/* Above the Fold Highlight Box */}
+                              <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 whitespace-pre-wrap">
+                                <div className="flex items-center justify-between mb-1">
+                                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                                    Above the Fold (Visible Immediately)
+                                  </span>
+                                  <span className="text-[10px] font-mono font-semibold text-emerald-700">
+                                    {Math.min(postBody.length, charLimit)} / {charLimit} chars
+                                  </span>
+                                </div>
+                                <div className="text-gray-900 font-medium">{aboveFold}</div>
+                              </div>
+
+                              {/* ...see more cutoff line */}
+                              {belowFold.length > 0 && (
+                                <>
+                                  <div className="relative my-3 flex items-center justify-center">
+                                    <div className="border-t border-dashed border-amber-400 w-full"></div>
+                                    <span className="bg-amber-50 border border-amber-300 text-amber-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap mx-2 shadow-2xs">
+                                      ✂️ ...see more (CTR Trigger Line)
+                                    </span>
+                                    <div className="border-t border-dashed border-amber-400 w-full"></div>
+                                  </div>
+
+                                  {/* Below the Fold */}
+                                  <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-200/80 text-gray-600 whitespace-pre-wrap">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
+                                        Below the Fold (Requires Click)
+                                      </span>
+                                      <span className="text-[10px] font-mono text-gray-400">
+                                        +{belowFold.length} chars
+                                      </span>
+                                    </div>
+                                    {belowFold}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })()
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-2 py-4">
                           <div className="h-3 w-full bg-gray-100 rounded"></div>
                           <div className="h-3 w-5/6 bg-gray-100 rounded"></div>
                           <div className="h-3 w-4/6 bg-gray-100 rounded"></div>
+                          <p className="text-[11px] text-gray-400 text-center pt-2">
+                            Generate or type a post to simulate Mobile (140c) &amp; Desktop (210c) fold cutoffs.
+                          </p>
                         </div>
                       )}
                     </div>
-                    
-                    {/* Mock LinkedIn Footer */}
-                    <div className="px-4 py-3 bg-gray-50 border-t border-gray-100 flex justify-between">
-                      <div className="h-4 w-12 bg-gray-200 rounded"></div>
-                      <div className="h-4 w-12 bg-gray-200 rounded"></div>
-                      <div className="h-4 w-12 bg-gray-200 rounded"></div>
-                    </div>
                   </div>
+
+                  {/* 100% Deterministic 360 Brew Penalty & Dwell-Time Scanner */}
+                  {postBody && (() => {
+                    const words = postBody.trim().split(/\s+/).filter(Boolean).length;
+                    const paragraphs = postBody.split(/\n\n+/).filter((p) => p.trim().length > 0);
+                    const denseParas = paragraphs.filter((p) => p.length > 260).length;
+                    const dwellSec = Math.max(8, Math.round((words / 180) * 60 + paragraphs.length * 1.5));
+                    const charLimit = foldDevice === 'mobile' ? 140 : 210;
+                    const aboveFold = postBody.slice(0, charLimit);
+                    const hasOpenLoop = /([:?…]|\.\.\.)$|\b(here is|here's|how|why|proved otherwise|took|instead|until|mistake|secret|truth|lesson)\b/i.test(
+                      aboveFold.trim()
+                    );
+                    const hasUrl = /https?:\/\//i.test(postBody);
+                    const hasBait = /comment\s+(yes|below|interested)|tag a friend|link in comment|agree\?/i.test(postBody);
+                    const hashtagCount = (postBody.match(/#[\w]+/g) || []).length;
+                    const hashtagOk = hashtagCount >= 3 && hashtagCount <= 5;
+
+                    return (
+                      <div className="border border-slate-200 rounded-xl bg-slate-900 text-white p-4 shadow-sm space-y-3">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                            <span className="text-xs font-bold tracking-tight">
+                              360 Brew Penalty &amp; Dwell-Time Scanner
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                            100% Deterministic
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between py-1 px-2 rounded bg-slate-800/70">
+                            <span className="text-slate-300">Estimated Dwell Time</span>
+                            <span className="font-bold text-emerald-400">
+                              ~{dwellSec} sec ({words} words · {paragraphs.length} paras)
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-1 px-2 rounded bg-slate-800/70">
+                            <span className="text-slate-300">Open-Loop Before Fold</span>
+                            <span className={`font-bold ${hasOpenLoop ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {hasOpenLoop ? 'PASS (Tension Triggered)' : 'WARN (Add ? or Tension)'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-1 px-2 rounded bg-slate-800/70">
+                            <span className="text-slate-300">Outbound Link in Body</span>
+                            <span className={`font-bold ${!hasUrl ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {!hasUrl ? 'PASS (0 Links)' : 'FAIL (-40% Reach Penalty)'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-1 px-2 rounded bg-slate-800/70">
+                            <span className="text-slate-300">Engagement-Bait Classifier</span>
+                            <span className={`font-bold ${!hasBait ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              {!hasBait ? 'PASS (Clean)' : 'FAIL (Bait Phrase Detected)'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-1 px-2 rounded bg-slate-800/70">
+                            <span className="text-slate-300">Hashtag Density ({hashtagCount})</span>
+                            <span className={`font-bold ${hashtagOk ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {hashtagOk ? 'PASS (Optimal 3–5)' : 'Target 3–5 Niche Tags'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center justify-between py-1 px-2 rounded bg-slate-800/70">
+                            <span className="text-slate-300">Paragraph Scanability (&lt;260c)</span>
+                            <span className={`font-bold ${denseParas === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {denseParas === 0 ? 'PASS (Mobile-Ready)' : `${denseParas} Dense Wall(s) (>260c)`}
+                            </span>
+                          </div>
+                        </div>
+
+                        {denseParas > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleAutoSpaceParagraphs}
+                            className="w-full py-2 px-3 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            1-Click Auto-Space Dense Lines (Deterministic Formatter)
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

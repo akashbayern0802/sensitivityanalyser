@@ -329,9 +329,11 @@ function ContentStudioContent() {
   useEffect(() => {
     const topicParam = searchParams.get('topic');
     const formatParam = searchParams.get('format');
+    const angleParam = searchParams.get('angle');
     
     if (topicParam) setTopic(topicParam);
     if (formatParam) setFormat(formatParam);
+    if (angleParam) setAngle(angleParam);
   }, [searchParams]);
 
   const getLLMConfig = () => {
@@ -1559,9 +1561,3 @@ export default function ContentStudioPage() {
     </Suspense>
   );
 }
-
-
-
-
-
-

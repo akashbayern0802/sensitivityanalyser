@@ -286,3 +286,4 @@ Output ONLY valid JSON in this exact format (no markdown fences):
     );
   }
 }
+

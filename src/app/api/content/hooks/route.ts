@@ -5,6 +5,7 @@ import { resolveLanguageModel } from '@/lib/ai/provider-factory';
 import { retrieveChunks } from '@/lib/rag/retriever';
 import { rerankChunks } from '@/lib/rag/reranker';
 import { runNLICritic } from '@/lib/rag/critic';
+import { calculateLinkedInFold } from '@/lib/foldCalculator';
 import type { RetrievedChunk } from '@/lib/rag/retriever';
 
 const MOCK_USER_ID = 'user_mock_id';
@@ -32,6 +33,7 @@ function extractAllowedMetrics(textSources: string[]): string[] {
 
 /**
  * Deterministic 40-point Fold Mechanics scorer.
+ * Uses real-world 3-visual-line clamp simulator (~42 chars/line).
  */
 function scoreFoldMechanics(hookText: string): {
   foldScore: number;
@@ -40,15 +42,15 @@ function scoreFoldMechanics(hookText: string): {
   noCliches: boolean;
 } {
   const trimmed = hookText.trim();
-  const firstLine = trimmed.split('\n')[0] || '';
+  const fold = calculateLinkedInFold(trimmed, 'mobile');
 
-  // 1. Fits cleanly in mobile fold (first line <= 140 chars & total hook <= 210 chars) (15 pts)
-  const fitsMobileFold = firstLine.length <= 140 && trimmed.length <= 210;
-  const foldFitPts = fitsMobileFold ? 15 : trimmed.length <= 240 ? 10 : 5;
+  // 1. Fits cleanly in 3 visual lines on mobile (15 pts)
+  const fitsMobileFold = !fold.isTruncated;
+  const foldFitPts = fitsMobileFold ? 15 : fold.aboveFold.length >= 70 ? 10 : 5;
 
-  // 2. Open loop / tension trigger before cutoff (15 pts)
-  const aboveMobileCutoff = trimmed.substring(0, 160).trim();
-  const hasOpenLoop = OPEN_LOOP_REGEX.test(aboveMobileCutoff) || OPEN_LOOP_REGEX.test(trimmed);
+  // 2. Open loop / tension trigger strictly before the 3-line visual fold (15 pts)
+  const hasOpenLoop =
+    OPEN_LOOP_REGEX.test(fold.aboveFold.trim()) || OPEN_LOOP_REGEX.test(trimmed);
   const openLoopPts = hasOpenLoop ? 15 : 7;
 
   // 3. Zero AI clichés (10 pts)
@@ -142,9 +144,8 @@ Generate these 3 exact archetypes:
 3. LESSON: Start with a concrete moment of friction or challenge from the source context ("When we...", "Most teams..."), ending with an open loop before the solution.
 
 RULES FOR ALL 3 HOOKS:
-- Maximum 190 characters per hook (so the first line fits cleanly above the 140-char mobile fold).
-- Include a line break (\\n\\n) between sentence 1 and sentence 2.
-- End with a colon (:) or open-loop cliffhanger that compels the reader to click "...see more".
+- Keep the entire hook strictly within 3 visual lines (~110-135 characters total). On mobile screens (~42 chars/line), sentences longer than 45 chars wrap into 2 visual lines. Keep Sentence 1 punchy (under 50 chars) so Sentence 2 fits above the 3-line fold.
+- End with a colon (:) or open-loop cliffhanger that triggers right before "...see more".
 - ZERO fabricated metrics, ZERO corporate clichés.
 
 Output ONLY valid JSON in this exact format (no markdown fences):

@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send, ShieldCheck, AlertTriangle, Zap, Smartphone, Monitor } from 'lucide-react';
+import { calculateLinkedInFold } from '@/lib/foldCalculator';
 
 function ContentStudioContent() {
   const searchParams = useSearchParams();
@@ -1394,35 +1395,39 @@ function ContentStudioContent() {
                       </div>
                     </div>
 
-                    {/* Fold Split Body */}
+                    {/* Fold Split Body with 3-Line Visual Clamp */}
                     <div className="p-4">
                       {postBody ? (
                         (() => {
-                          const charLimit = foldDevice === 'mobile' ? 140 : 210;
-                          const aboveFold = postBody.slice(0, charLimit);
-                          const belowFold = postBody.slice(charLimit);
+                          const fold = calculateLinkedInFold(postBody, foldDevice);
+                          const { aboveFold, belowFold, visualLines, maxVisualLines, hardCharCap, isTruncated } = fold;
                           return (
                             <div className="text-xs text-gray-800 font-sans leading-relaxed">
                               {/* Above the Fold Highlight Box */}
                               <div className="p-2.5 rounded-lg bg-emerald-50/70 border border-emerald-200 whitespace-pre-wrap">
-                                <div className="flex items-center justify-between mb-1">
-                                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
-                                    Above the Fold (Visible Immediately)
-                                  </span>
+                                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                                      Above the Fold (Visible Immediately)
+                                    </span>
+                                    <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-emerald-200/80 text-emerald-900">
+                                      {visualLines} / {maxVisualLines} Visual Lines
+                                    </span>
+                                  </div>
                                   <span className="text-[10px] font-mono font-semibold text-emerald-700">
-                                    {Math.min(postBody.length, charLimit)} / {charLimit} chars
+                                    {aboveFold.length} chars (Cap: {hardCharCap}c)
                                   </span>
                                 </div>
                                 <div className="text-gray-900 font-medium">{aboveFold}</div>
                               </div>
 
                               {/* ...see more cutoff line */}
-                              {belowFold.length > 0 && (
+                              {isTruncated && belowFold.length > 0 && (
                                 <>
                                   <div className="relative my-3 flex items-center justify-center">
                                     <div className="border-t border-dashed border-amber-400 w-full"></div>
-                                    <span className="bg-amber-50 border border-amber-300 text-amber-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap mx-2 shadow-2xs">
-                                      ✂️ ...see more (CTR Trigger Line)
+                                    <span className="bg-amber-50 border border-amber-300 text-amber-800 px-2.5 py-0.5 rounded-full text-[10px] font-bold whitespace-nowrap mx-2 shadow-2xs flex items-center gap-1">
+                                      ✂️ ...see more ({maxVisualLines}-Line Clamp Trigger)
                                     </span>
                                     <div className="border-t border-dashed border-amber-400 w-full"></div>
                                   </div>
@@ -1450,7 +1455,7 @@ function ContentStudioContent() {
                           <div className="h-3 w-5/6 bg-gray-100 rounded"></div>
                           <div className="h-3 w-4/6 bg-gray-100 rounded"></div>
                           <p className="text-[11px] text-gray-400 text-center pt-2">
-                            Generate or type a post to simulate Mobile (140c) &amp; Desktop (210c) fold cutoffs.
+                            Generate or type a post to simulate Mobile (3 lines / 140c) &amp; Desktop (5 lines / 230c) fold cutoffs.
                           </p>
                         </div>
                       )}
@@ -1463,10 +1468,9 @@ function ContentStudioContent() {
                     const paragraphs = postBody.split(/\n\n+/).filter((p) => p.trim().length > 0);
                     const denseParas = paragraphs.filter((p) => p.length > 260).length;
                     const dwellSec = Math.max(8, Math.round((words / 180) * 60 + paragraphs.length * 1.5));
-                    const charLimit = foldDevice === 'mobile' ? 140 : 210;
-                    const aboveFold = postBody.slice(0, charLimit);
+                    const fold = calculateLinkedInFold(postBody, foldDevice);
                     const hasOpenLoop = /([:?…]|\.\.\.)$|\b(here is|here's|how|why|proved otherwise|took|instead|until|mistake|secret|truth|lesson)\b/i.test(
-                      aboveFold.trim()
+                      fold.aboveFold.trim()
                     );
                     const hasUrl = /https?:\/\//i.test(postBody);
                     const hasBait = /comment\s+(yes|below|interested)|tag a friend|link in comment|agree\?/i.test(postBody);

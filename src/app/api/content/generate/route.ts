@@ -53,24 +53,21 @@ export async function POST(req: Request) {
       systemPrompt = built.systemPrompt;
       prompt = built.userPrompt;
     } else {
-      // Fallback: non-RAG prompt (same as original)
-      prompt = `Write a LinkedIn post.
-      Topic: ${topic}
-      Format: ${format}
-      Angle/Perspective: ${angle}
-      User's Role: ${userRole}
-      
-      Constraints:
-      - Write in a highly conversational, human, and authentic tone (like you're talking to a colleague over coffee).
-      - DO NOT use generic AI intros like "Have you ever wondered..." or "In today's fast paced world...".
-      - Start with a punchy, scroll-stopping hook (first 1-2 lines).
-      - Use plenty of whitespace (1-2 sentences per paragraph max).
-      - Sprinkle 2-4 relevant emojis naturally throughout the text to break it up visually.
-      - Avoid cringy corporate buzzwords or overly dramatic language.
-      - End with an engaging, casual question to invite comments.
-      - Add 3-5 relevant hashtags at the very bottom.
-      
-      Also, at the very end of your response, on a new line starting with "IMAGE_PROMPT:", provide a prompt for an AI image generator.`;
+      // Fallback: non-RAG prompt grounded in I-H-O-P framework
+      prompt = `Write a high-converting, authoritative LinkedIn post using the I-H-O-P Framework:
+
+Topic: ${topic}
+Format: ${format}
+${angle ? `Strategic Angle / Perspective: ${angle}` : ''}
+Author Role: ${userRole}
+
+Execute across all 4 pillars:
+1. [💡 IDEA]: Focus on a timely, relatable tension or challenge in ${userRole}'s domain. Avoid textbook definitions or bland corporate overviews.
+2. [🪝 HOOK]: First 2 lines MUST deliver Curiosity + Credibility + a Commitment to Value. Sentence 1 must be under 45 characters. The hook must fit within 3 visual lines (~125 chars total) ending with a colon (:).
+3. [🎯 OPINION]: Provide a bold, additive, or contrarian POV. What makes it worthwhile to hear this from YOU? Do NOT copy-paste generic advice (e.g. "alignment is key"). Take a strong stand on what breaks in practice and what to do instead.
+4. [📦 PACKAGING]: Ultra-readable whitespace (1-2 sentences per paragraph max, under 200 chars each). NO generic AI openers ("In today's fast-paced world...", "Have you ever..."). End with an engaging peer discussion question and 3-5 relevant hashtags.
+
+At the very end of your response, on a new line starting with "IMAGE_PROMPT:", provide a prompt for a high-signal concept diagram or illustration representing this insight.`;
     }
 
     // === PHASE 3: Generate ===

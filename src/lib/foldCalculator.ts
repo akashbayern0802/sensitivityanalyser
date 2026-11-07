@@ -101,3 +101,4 @@ export function calculateLinkedInFold(
     isTruncated: cutoffIndex < text.length,
   };
 }
+

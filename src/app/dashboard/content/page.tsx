@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send, ShieldCheck, AlertTriangle, Zap, Smartphone, Monitor } from 'lucide-react';
+import { Sparkles, Edit3, Image as ImageIcon, Copy, Check, Loader2, ArrowLeft, LayoutTemplate, Share2, ExternalLink, MessageSquare, Send, ShieldCheck, AlertTriangle, Zap, Smartphone, Monitor, BookOpen, Plus, Trash2, Globe, FileText, Database } from 'lucide-react';
 import { calculateLinkedInFold } from '@/lib/foldCalculator';
 
 function ContentStudioContent() {
@@ -129,6 +129,196 @@ function ContentStudioContent() {
       .join('\n')
       .replace(/\n{3,}/g, '\n\n');
     setPostBody(spaced);
+  };
+
+  // ─── Gemini Notebook State & Handlers (Approach A: In-Studio Drawer) ───
+  const [isNotebookOpen, setIsNotebookOpen] = useState(false);
+  const [notebookSources, setNotebookSources] = useState<Array<{
+    id: string;
+    title: string;
+    content: string;
+    type: 'note' | 'url' | 'vault';
+    url?: string;
+    wordCount: number;
+  }>>([
+    {
+      id: 'src_default_fintech',
+      title: 'Zero-MDR UPI & Concurrency Unit Economics Memo',
+      content:
+        'Gross transaction volume across Indian payment aggregators climbed 68% YoY. However, zero-MDR mandate keeps payment gateway interchange at zero. Cloud infrastructure and concurrency scaling costs rose 42% annually to support 10k TPS peak concurrency. Payment aggregators cannot survive on transaction routing alone; margin must come from embedded lending and fraud intelligence feeds.',
+      type: 'note',
+      wordCount: 58,
+    },
+  ]);
+  const [isAddingSource, setIsAddingSource] = useState(false);
+  const [activeSourceType, setActiveSourceType] = useState<'note' | 'url' | 'vault'>('note');
+  const [newSourceTitle, setNewSourceTitle] = useState('');
+  const [newSourceContent, setNewSourceContent] = useState('');
+  const [newSourceUrl, setNewSourceUrl] = useState('');
+  const [isExtractingUrl, setIsExtractingUrl] = useState(false);
+  const [vaultItemsList, setVaultItemsList] = useState<any[]>([]);
+  const [isLoadingVault, setIsLoadingVault] = useState(false);
+
+  const [notebookQuery, setNotebookQuery] = useState('');
+  const [isSynthesizingNotebook, setIsSynthesizingNotebook] = useState(false);
+  const [notebookSynthesis, setNotebookSynthesis] = useState<{
+    answer: string;
+    query: string;
+    metrics: string[];
+    sourceCount: number;
+    timestamp: string;
+  } | null>(null);
+  const [isDraftingFromNotebook, setIsDraftingFromNotebook] = useState(false);
+  const [notebookNotification, setNotebookNotification] = useState<string | null>(null);
+
+  const fetchVaultItemsForNotebook = async () => {
+    setIsLoadingVault(true);
+    try {
+      const res = await fetch('/api/vault/items');
+      const data = await res.json();
+      if (data.success && data.items) {
+        setVaultItemsList(data.items);
+      }
+    } catch (e) {
+      console.error('Failed to load vault items for notebook', e);
+    } finally {
+      setIsLoadingVault(false);
+    }
+  };
+
+  const handleAddPastedSource = () => {
+    if (!newSourceContent.trim()) return;
+    const wordCount = newSourceContent.trim().split(/\s+/).filter(Boolean).length;
+    const newSrc = {
+      id: `src_note_${Date.now()}`,
+      title: newSourceTitle.trim() || `Memo / Note (${wordCount} words)`,
+      content: newSourceContent.trim(),
+      type: 'note' as const,
+      wordCount,
+    };
+    setNotebookSources((prev) => [newSrc, ...prev]);
+    setNewSourceTitle('');
+    setNewSourceContent('');
+    setIsAddingSource(false);
+    setNotebookNotification('✓ Added note to Gemini Notebook');
+    setTimeout(() => setNotebookNotification(null), 3000);
+  };
+
+  const handleAddUrlSource = async () => {
+    if (!newSourceUrl.trim()) return;
+    setIsExtractingUrl(true);
+    try {
+      const res = await fetch('/api/content/notebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'extract-url', url: newSourceUrl.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to extract URL content');
+      }
+      setNotebookSources((prev) => [data.source, ...prev]);
+      setNewSourceUrl('');
+      setIsAddingSource(false);
+      setNotebookNotification(`✓ Loaded "${data.source.title.slice(0, 32)}..." into Notebook`);
+      setTimeout(() => setNotebookNotification(null), 3000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to extract URL');
+    } finally {
+      setIsExtractingUrl(false);
+    }
+  };
+
+  const handleImportVaultItem = (item: any) => {
+    const existing = notebookSources.find((s) => s.id === `src_vault_${item.id}`);
+    if (existing) {
+      setNotebookNotification('Item already loaded in notebook');
+      setTimeout(() => setNotebookNotification(null), 2500);
+      return;
+    }
+    const wordCount = (item.content || '').split(/\s+/).filter(Boolean).length;
+    const newSrc = {
+      id: `src_vault_${item.id}`,
+      title: item.title,
+      content: item.content,
+      type: 'vault' as const,
+      wordCount,
+    };
+    setNotebookSources((prev) => [newSrc, ...prev]);
+    setIsAddingSource(false);
+    setNotebookNotification(`✓ Imported "${item.title.slice(0, 32)}..." from Vault`);
+    setTimeout(() => setNotebookNotification(null), 3000);
+  };
+
+  const handleRemoveNotebookSource = (id: string) => {
+    setNotebookSources((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const handleSynthesizeNotebook = async (preset?: string, customQuery?: string) => {
+    if (notebookSources.length === 0) {
+      alert('Please add at least one document or note to the notebook first.');
+      return;
+    }
+    setIsSynthesizingNotebook(true);
+    try {
+      const config = getLLMConfig();
+      const res = await fetch('/api/content/notebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'synthesize',
+          sources: notebookSources,
+          preset,
+          query: customQuery || notebookQuery,
+          modelConfig: config,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Synthesis failed');
+      }
+      setNotebookSynthesis(data.synthesis);
+      if (customQuery) setNotebookQuery('');
+    } catch (err: any) {
+      alert(err.message || 'Failed to synthesize with Gemini');
+    } finally {
+      setIsSynthesizingNotebook(false);
+    }
+  };
+
+  const handleDraftPostFromNotebook = async (insightText: string) => {
+    setIsDraftingFromNotebook(true);
+    try {
+      const config = getLLMConfig();
+      const res = await fetch('/api/content/notebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'draft-post',
+          insight: insightText,
+          sources: notebookSources,
+          preferredTopic: topic || undefined,
+          modelConfig: config,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to draft post from insight');
+      }
+      if (data.draft) {
+        setPostBody(data.draft.postBody || '');
+        if (data.draft.topic) setTopic(data.draft.topic);
+        if (data.draft.angle) setAngle(data.draft.angle);
+        if (data.draft.imagePrompt) setImagePrompt(data.draft.imagePrompt);
+        setActiveTab('editor');
+        setNotebookNotification('✓ Generated I-H-O-P post draft & synced to Live Fold Simulator!');
+        setTimeout(() => setNotebookNotification(null), 4000);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate post draft');
+    } finally {
+      setIsDraftingFromNotebook(false);
+    }
   };
 
   // Syndication & Launchpad State (Phase 1)
@@ -455,7 +645,7 @@ function ContentStudioContent() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <button 
             onClick={() => router.back()} 
@@ -464,9 +654,57 @@ function ContentStudioContent() {
             <ArrowLeft className="w-4 h-4 mr-1" />
             Back
           </button>
-          <h1 className="text-3xl font-bold text-gray-900">Content Studio</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold text-gray-900">Content Studio</h1>
+            <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              I-H-O-P Engine
+            </span>
+          </div>
+        </div>
+
+        {/* Gemini Notebook Drawer Toggle (Approach A) */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setIsNotebookOpen((prev) => !prev);
+              if (!isNotebookOpen && activeTab !== 'editor') {
+                setActiveTab('editor');
+              }
+            }}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold transition-all border shadow-xs ${
+              isNotebookOpen
+                ? 'bg-indigo-600 text-white border-indigo-600 shadow-indigo-600/20'
+                : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50 hover:border-indigo-300'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>{isNotebookOpen ? 'Hide Gemini Notebook ◀' : 'Open Gemini Notebook ▶'}</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono font-bold ${
+                isNotebookOpen ? 'bg-indigo-800 text-indigo-200' : 'bg-indigo-100 text-indigo-800'
+              }`}
+            >
+              {notebookSources.length} {notebookSources.length === 1 ? 'Source' : 'Sources'}
+            </span>
+          </button>
         </div>
       </div>
+
+      {notebookNotification && (
+        <div className="mb-4 p-3 rounded-xl bg-indigo-900 text-white text-xs font-medium flex items-center justify-between shadow-md transition-all animate-fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-400" />
+            <span>{notebookNotification}</span>
+          </div>
+          <button
+            onClick={() => setNotebookNotification(null)}
+            className="text-xs text-indigo-200 hover:text-white"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {/* Tabs */}
@@ -626,9 +864,350 @@ function ContentStudioContent() {
           )}
 
           {activeTab === 'editor' && (
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            <div className={`grid grid-cols-1 ${isNotebookOpen ? 'lg:grid-cols-12 gap-6' : 'lg:grid-cols-5 gap-8'}`}>
+              
+              {/* ─── Approach A: In-Studio Gemini Research Drawer ─── */}
+              {isNotebookOpen && (
+                <div className="lg:col-span-4 bg-gradient-to-b from-indigo-50/50 via-white to-slate-50/60 border border-indigo-200/90 rounded-2xl p-4 space-y-4 shadow-sm flex flex-col justify-between">
+                  <div className="space-y-4">
+                    {/* Drawer Header */}
+                    <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5">
+                      <div className="flex items-center gap-2">
+                        <span className="p-1.5 rounded-lg bg-indigo-600 text-white text-xs">📓</span>
+                        <div>
+                          <h3 className="text-xs font-bold text-gray-900 tracking-tight">Gemini Research Notebook</h3>
+                          <span className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                            ● Grounded Context Active
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setIsNotebookOpen(false)}
+                        className="text-xs text-gray-400 hover:text-gray-700 p-1"
+                        title="Hide Notebook Drawer"
+                      >
+                        ✕
+                      </button>
+                    </div>
+
+                    {/* Sources Management Header */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-gray-800">
+                          Sources ({notebookSources.length})
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingSource((prev) => !prev);
+                            if (!isAddingSource && activeSourceType === 'vault' && vaultItemsList.length === 0) {
+                              fetchVaultItemsForNotebook();
+                            }
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-600 hover:text-indigo-800"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          {isAddingSource ? 'Close Source Panel' : 'Add Source'}
+                        </button>
+                      </div>
+
+                      {/* Add Source Drawer Panel */}
+                      {isAddingSource && (
+                        <div className="p-3 rounded-xl bg-white border border-indigo-200 shadow-xs space-y-2.5 text-xs">
+                          {/* Mini Sub-tabs */}
+                          <div className="flex border-b border-gray-100 pb-1.5 gap-2 text-[11px]">
+                            <button
+                              type="button"
+                              onClick={() => setActiveSourceType('note')}
+                              className={`pb-1 font-semibold border-b-2 transition-colors ${
+                                activeSourceType === 'note'
+                                  ? 'border-indigo-600 text-indigo-700'
+                                  : 'border-transparent text-gray-500 hover:text-gray-800'
+                              }`}
+                            >
+                              📝 Paste Memo
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setActiveSourceType('url')}
+                              className={`pb-1 font-semibold border-b-2 transition-colors ${
+                                activeSourceType === 'url'
+                                  ? 'border-indigo-600 text-indigo-700'
+                                  : 'border-transparent text-gray-500 hover:text-gray-800'
+                              }`}
+                            >
+                              🔗 Web URL
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveSourceType('vault');
+                                if (vaultItemsList.length === 0) fetchVaultItemsForNotebook();
+                              }}
+                              className={`pb-1 font-semibold border-b-2 transition-colors ${
+                                activeSourceType === 'vault'
+                                  ? 'border-indigo-600 text-indigo-700'
+                                  : 'border-transparent text-gray-500 hover:text-gray-800'
+                              }`}
+                            >
+                              🏛️ Knowledge Vault
+                            </button>
+                          </div>
+
+                          {/* Tab 1: Note / Memo */}
+                          {activeSourceType === 'note' && (
+                            <div className="space-y-2">
+                              <input
+                                type="text"
+                                value={newSourceTitle}
+                                onChange={(e) => setNewSourceTitle(e.target.value)}
+                                placeholder="Source Label (e.g. Q3 UPI Infrastructure Concurrency)"
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-500"
+                              />
+                              <textarea
+                                value={newSourceContent}
+                                onChange={(e) => setNewSourceContent(e.target.value)}
+                                rows={3}
+                                placeholder="Paste raw notes, whitepaper excerpt, or architecture memo..."
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-500 resize-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleAddPastedSource}
+                                disabled={!newSourceContent.trim()}
+                                className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition-colors"
+                              >
+                                + Add to Notebook
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Tab 2: Web URL */}
+                          {activeSourceType === 'url' && (
+                            <div className="space-y-2">
+                              <input
+                                type="url"
+                                value={newSourceUrl}
+                                onChange={(e) => setNewSourceUrl(e.target.value)}
+                                placeholder="https://example.com/report-or-circular"
+                                className="w-full px-2.5 py-1.5 border border-gray-200 rounded-lg text-xs outline-none focus:border-indigo-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={handleAddUrlSource}
+                                disabled={isExtractingUrl || !newSourceUrl.trim()}
+                                className="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+                              >
+                                {isExtractingUrl ? (
+                                  <>
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                    <span>Extracting &amp; Indexing...</span>
+                                  </>
+                                ) : (
+                                  <span>Extract &amp; Add to Notebook</span>
+                                )}
+                              </button>
+                            </div>
+                          )}
+
+                          {/* Tab 3: Knowledge Vault Import */}
+                          {activeSourceType === 'vault' && (
+                            <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                              {isLoadingVault ? (
+                                <div className="py-4 text-center text-gray-400 flex items-center justify-center gap-2">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Loading Vault items...</span>
+                                </div>
+                              ) : vaultItemsList.length === 0 ? (
+                                <p className="text-gray-400 text-center py-2 text-[11px]">No items in Knowledge Vault yet.</p>
+                              ) : (
+                                vaultItemsList.map((item) => (
+                                  <div
+                                    key={item.id}
+                                    className="p-2 border border-gray-100 rounded-lg bg-gray-50 hover:bg-indigo-50/50 flex items-center justify-between gap-2"
+                                  >
+                                    <div className="min-w-0">
+                                      <p className="font-semibold text-gray-900 truncate text-[11px]">{item.title}</p>
+                                      <p className="text-[10px] text-gray-500 truncate">{item.category}</p>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleImportVaultItem(item)}
+                                      className="px-2 py-0.5 text-[10px] font-semibold bg-indigo-100 text-indigo-700 rounded hover:bg-indigo-200 shrink-0"
+                                    >
+                                      + Load
+                                    </button>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Loaded Sources List */}
+                      <div className="space-y-1.5 max-h-36 overflow-y-auto pr-0.5">
+                        {notebookSources.map((s) => (
+                          <div
+                            key={s.id}
+                            className="p-2 rounded-lg bg-white border border-indigo-100/80 shadow-2xs flex items-center justify-between text-xs group"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-indigo-600 text-xs shrink-0">
+                                {s.type === 'url' ? '🔗' : s.type === 'vault' ? '🏛️' : '📝'}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="font-semibold text-gray-800 text-[11px] truncate">{s.title}</p>
+                                <span className="text-[10px] text-gray-400 font-mono">
+                                  {s.wordCount} words · {s.type.toUpperCase()}
+                                </span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveNotebookSource(s.id)}
+                              className="text-gray-400 hover:text-rose-600 p-1 transition-colors shrink-0"
+                              title="Remove source from notebook"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Gemini Quick-Action Synthesis Pills */}
+                    <div className="space-y-1.5 pt-1 border-t border-indigo-100">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900 block">
+                        Gemini Quick Synthesis
+                      </span>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleSynthesizeNotebook('contradiction')}
+                          disabled={isSynthesizingNotebook}
+                          className="p-2 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-left text-[11px] font-semibold transition-all flex flex-col justify-between"
+                        >
+                          <span>💡 Core Contradiction</span>
+                          <span className="text-[9px] font-normal text-indigo-600">Find the paradox</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSynthesizeNotebook('metrics')}
+                          disabled={isSynthesizingNotebook}
+                          className="p-2 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 text-left text-[11px] font-semibold transition-all flex flex-col justify-between"
+                        >
+                          <span>📊 Extract Metrics</span>
+                          <span className="text-[9px] font-normal text-emerald-600">Numbers &amp; stats</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSynthesizeNotebook('contrarian')}
+                          disabled={isSynthesizingNotebook}
+                          className="p-2 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-left text-[11px] font-semibold transition-all flex flex-col justify-between"
+                        >
+                          <span>🎯 Contrarian Angle</span>
+                          <span className="text-[9px] font-normal text-purple-600">Executive POV</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSynthesizeNotebook('playbook')}
+                          disabled={isSynthesizingNotebook}
+                          className="p-2 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 text-left text-[11px] font-semibold transition-all flex flex-col justify-between"
+                        >
+                          <span>🏗️ 3-Step Playbook</span>
+                          <span className="text-[9px] font-normal text-amber-600">Actionable rules</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Synthesis Output Display Card */}
+                    {isSynthesizingNotebook ? (
+                      <div className="p-4 rounded-xl bg-white border border-indigo-200 text-center space-y-2">
+                        <Loader2 className="w-5 h-5 text-indigo-600 animate-spin mx-auto" />
+                        <p className="text-xs text-indigo-900 font-semibold">
+                          Gemini reading {notebookSources.length} source{notebookSources.length === 1 ? '' : 's'}...
+                        </p>
+                        <p className="text-[10px] text-gray-500">Cross-referencing claims and extracting metrics</p>
+                      </div>
+                    ) : notebookSynthesis ? (
+                      <div className="p-3.5 rounded-xl bg-white border border-indigo-300 shadow-xs space-y-2 text-xs">
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-bold text-indigo-900 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                            Grounded Extract
+                          </span>
+                          <span className="text-[10px] font-mono text-gray-500">
+                            {notebookSynthesis.sourceCount} Sources
+                          </span>
+                        </div>
+
+                        <div className="max-h-48 overflow-y-auto text-gray-800 text-[11px] whitespace-pre-wrap leading-relaxed pr-1 font-sans">
+                          {notebookSynthesis.answer}
+                        </div>
+
+                        {notebookSynthesis.metrics?.length > 0 && (
+                          <div className="pt-1.5 border-t border-gray-100 flex items-center gap-1 flex-wrap">
+                            <span className="text-[10px] font-bold text-gray-500">Verified:</span>
+                            {notebookSynthesis.metrics.map((m, i) => (
+                              <span
+                                key={i}
+                                className="px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200"
+                              >
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => handleDraftPostFromNotebook(notebookSynthesis.answer)}
+                          disabled={isDraftingFromNotebook}
+                          className="w-full mt-2 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                        >
+                          {isDraftingFromNotebook ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Drafting I-H-O-P Post...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>⚡ Send as I-H-O-P Post Draft →</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {/* Free-form Notebook Prompt Input */}
+                  <div className="pt-2 border-t border-indigo-100">
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={notebookQuery}
+                        onChange={(e) => setNotebookQuery(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSynthesizeNotebook(undefined, notebookQuery)}
+                        placeholder="Ask Gemini across all loaded sources..."
+                        className="w-full bg-white border border-gray-200 rounded-lg px-2.5 py-2 text-xs text-gray-900 placeholder-gray-400 focus:outline-none focus:border-indigo-500 pr-14"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleSynthesizeNotebook(undefined, notebookQuery)}
+                        disabled={isSynthesizingNotebook || !notebookQuery.trim()}
+                        className="absolute right-1.5 top-1.5 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded text-[10px] font-semibold transition-colors"
+                      >
+                        Ask
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Editor Section */}
-              <div className="lg:col-span-3 space-y-6">
+              <div className={`${isNotebookOpen ? 'lg:col-span-5' : 'lg:col-span-3'} space-y-6`}>
 
                 {/* Carousel Preview — Feature 4 */}
                 {carouselSlides.length > 0 && (
@@ -1334,7 +1913,7 @@ function ContentStudioContent() {
               </div>
 
               {/* Preview Section: Live Fold Simulator + 360 Brew Penalty & Dwell-Time Scanner */}
-              <div className="lg:col-span-2">
+              <div className={isNotebookOpen ? 'lg:col-span-3' : 'lg:col-span-2'}>
                 <div className="sticky top-6 space-y-4">
                   {/* Header + Mobile/Desktop Fold Toggle */}
                   <div className="flex items-center justify-between">

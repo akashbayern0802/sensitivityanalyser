@@ -169,6 +169,17 @@ function ContentStudioContent() {
     timestamp: string;
   } | null>(null);
   const [isDraftingFromNotebook, setIsDraftingFromNotebook] = useState(false);
+  const [isGeneratingNotebookCarousel, setIsGeneratingNotebookCarousel] = useState(false);
+  const [isGeneratingInfographic, setIsGeneratingInfographic] = useState(false);
+  const [infographicData, setInfographicData] = useState<{
+    title: string;
+    subtitle: string;
+    metrics: Array<{ value: string; label: string; tone?: string }>;
+    comparisonRows: Array<{ dimension: string; legacyModel: string; modernPlaybook: string }>;
+    takeaway: string;
+  } | null>(null);
+  const [isExportingInfographic, setIsExportingInfographic] = useState(false);
+  const infographicRef = useRef<HTMLDivElement | null>(null);
   const [notebookNotification, setNotebookNotification] = useState<string | null>(null);
 
   const fetchVaultItemsForNotebook = async () => {
@@ -318,6 +329,108 @@ function ContentStudioContent() {
       alert(err.message || 'Failed to generate post draft');
     } finally {
       setIsDraftingFromNotebook(false);
+    }
+  };
+
+  const handleGenerateNotebookCarousel = async (insightText?: string) => {
+    if (notebookSources.length === 0 && !insightText) {
+      alert('Please load at least one source or note in the Gemini Notebook first.');
+      return;
+    }
+    setIsGeneratingNotebookCarousel(true);
+    try {
+      const config = getLLMConfig();
+      const res = await fetch('/api/content/notebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate-carousel',
+          insight: insightText || notebookSynthesis?.answer || '',
+          sources: notebookSources,
+          preferredTopic: topic || undefined,
+          modelConfig: config,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate carousel deck');
+      }
+      if (data.slides && data.slides.length > 0) {
+        setCarouselSlides(data.slides);
+      }
+      if (data.postBody) {
+        setPostBody(data.postBody);
+      }
+      if (data.topic) {
+        setTopic(data.topic);
+      }
+      setFormat('Carousel Slides');
+      setActiveTab('editor');
+      setNotebookNotification('✓ Built 6-Slide Carousel Deck & Companion Post! Ready for PDF export.');
+      setTimeout(() => setNotebookNotification(null), 4500);
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate carousel from notebook');
+    } finally {
+      setIsGeneratingNotebookCarousel(false);
+    }
+  };
+
+  const handleGenerateNotebookInfographic = async (insightText?: string) => {
+    if (notebookSources.length === 0 && !insightText) {
+      alert('Please load at least one source or note in the Gemini Notebook first.');
+      return;
+    }
+    setIsGeneratingInfographic(true);
+    try {
+      const config = getLLMConfig();
+      const res = await fetch('/api/content/notebook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate-infographic',
+          insight: insightText || notebookSynthesis?.answer || '',
+          sources: notebookSources,
+          preferredTopic: topic || undefined,
+          modelConfig: config,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to generate infographic card');
+      }
+      if (data.infographic) {
+        setInfographicData(data.infographic);
+        setActiveTab('editor');
+        setNotebookNotification('✓ Generated Executive Infographic Card! Ready for 1-click PNG download.');
+        setTimeout(() => setNotebookNotification(null), 4500);
+      }
+    } catch (err: any) {
+      alert(err.message || 'Failed to generate infographic from notebook');
+    } finally {
+      setIsGeneratingInfographic(false);
+    }
+  };
+
+  const handleExportInfographicPng = async () => {
+    if (!infographicRef.current) return;
+    setIsExportingInfographic(true);
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(infographicRef.current, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#0f172a',
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = 'linkedin-executive-infographic.png';
+      link.href = dataUrl;
+      link.click();
+    } catch (e) {
+      console.error('Infographic PNG export failed', e);
+      alert('Failed to export infographic PNG.');
+    } finally {
+      setIsExportingInfographic(false);
     }
   };
 
@@ -1122,6 +1235,57 @@ function ContentStudioContent() {
                       </div>
                     </div>
 
+                    {/* Visual Packaging Studio (Slides & Infographics from Notebook) */}
+                    <div className="space-y-1.5 pt-2 border-t border-indigo-100">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-900">
+                          Visual Studio (Slides &amp; Infographics)
+                        </span>
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
+                          1080×1080 Ready
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateNotebookCarousel()}
+                          disabled={isGeneratingNotebookCarousel || notebookSources.length === 0}
+                          className="p-2.5 rounded-lg bg-gradient-to-br from-indigo-600 to-purple-700 hover:from-indigo-700 hover:to-purple-800 disabled:opacity-50 text-white text-left text-[11px] font-semibold transition-all shadow-xs flex flex-col justify-between"
+                        >
+                          <span className="flex items-center gap-1">
+                            {isGeneratingNotebookCarousel ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <span>📑</span>
+                            )}
+                            <span>{isGeneratingNotebookCarousel ? 'Building Deck...' : '6-Slide Carousel'}</span>
+                          </span>
+                          <span className="text-[9px] font-normal text-indigo-100 mt-0.5">
+                            PDF Deck + Post
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleGenerateNotebookInfographic()}
+                          disabled={isGeneratingInfographic || notebookSources.length === 0}
+                          className="p-2.5 rounded-lg bg-gradient-to-br from-slate-800 to-indigo-950 hover:from-slate-900 hover:to-black disabled:opacity-50 text-white text-left text-[11px] font-semibold transition-all shadow-xs flex flex-col justify-between"
+                        >
+                          <span className="flex items-center gap-1">
+                            {isGeneratingInfographic ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : (
+                              <span>📊</span>
+                            )}
+                            <span>{isGeneratingInfographic ? 'Designing Card...' : 'Infographic Card'}</span>
+                          </span>
+                          <span className="text-[9px] font-normal text-emerald-300 mt-0.5">
+                            Metrics + Matrix PNG
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Synthesis Output Display Card */}
                     {isSynthesizingNotebook ? (
                       <div className="p-4 rounded-xl bg-white border border-indigo-200 text-center space-y-2">
@@ -1161,23 +1325,46 @@ function ContentStudioContent() {
                           </div>
                         )}
 
-                        <button
-                          type="button"
-                          onClick={() => handleDraftPostFromNotebook(notebookSynthesis.answer)}
-                          disabled={isDraftingFromNotebook}
-                          className="w-full mt-2 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                        >
-                          {isDraftingFromNotebook ? (
-                            <>
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              <span>Drafting I-H-O-P Post...</span>
-                            </>
-                          ) : (
-                            <>
-                              <span>⚡ Send as I-H-O-P Post Draft →</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="space-y-1.5 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => handleDraftPostFromNotebook(notebookSynthesis.answer)}
+                            disabled={isDraftingFromNotebook}
+                            className="w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                          >
+                            {isDraftingFromNotebook ? (
+                              <>
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                <span>Drafting I-H-O-P Post...</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>⚡ Send as I-H-O-P Post Draft →</span>
+                              </>
+                            )}
+                          </button>
+
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateNotebookCarousel(notebookSynthesis.answer)}
+                              disabled={isGeneratingNotebookCarousel}
+                              className="py-1.5 px-2 bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-lg text-[10px] font-semibold transition-colors flex items-center justify-center gap-1"
+                            >
+                              {isGeneratingNotebookCarousel ? <Loader2 className="w-3 h-3 animate-spin" /> : '📑'}
+                              <span>To 6-Slide PDF</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateNotebookInfographic(notebookSynthesis.answer)}
+                              disabled={isGeneratingInfographic}
+                              className="py-1.5 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200 rounded-lg text-[10px] font-semibold transition-colors flex items-center justify-center gap-1"
+                            >
+                              {isGeneratingInfographic ? <Loader2 className="w-3 h-3 animate-spin" /> : '📊'}
+                              <span>To Infographic</span>
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -1276,6 +1463,140 @@ function ContentStudioContent() {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Executive Infographic Card — Gemini Notebook Visual Studio */}
+                {infographicData && (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-sm font-semibold text-gray-800">
+                          📊 Executive Infographic Card (Grounded in Notebook)
+                        </h3>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          ✓ High-Res PNG Ready
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleExportInfographicPng}
+                          disabled={isExportingInfographic}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-xs"
+                        >
+                          {isExportingInfographic ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Exporting PNG...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>📥 Download Infographic (PNG)</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setInfographicData(null)}
+                          className="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                          ✕ Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Renderable Infographic Canvas */}
+                    <div
+                      ref={infographicRef}
+                      className="rounded-2xl bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white p-6 border border-indigo-500/30 shadow-lg space-y-5"
+                    >
+                      {/* Infographic Header */}
+                      <div className="border-b border-slate-800 pb-4 flex items-start justify-between gap-4">
+                        <div>
+                          <span className="inline-block text-[10px] font-bold uppercase tracking-widest text-indigo-400 mb-1">
+                            EXECUTIVE ARCHITECTURE BRIEF · VERIFIED SYNTHESIS
+                          </span>
+                          <h4 className="text-lg font-extrabold tracking-tight text-white leading-snug">
+                            {infographicData.title}
+                          </h4>
+                          <p className="text-xs text-slate-400 mt-0.5">{infographicData.subtitle}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="px-2.5 py-1 rounded-md bg-indigo-500/20 border border-indigo-400/30 text-[10px] font-mono font-bold text-indigo-300">
+                            {previewAuthorName}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 3 Hero Metric Callouts */}
+                      {infographicData.metrics?.length > 0 && (
+                        <div className="grid grid-cols-3 gap-3">
+                          {infographicData.metrics.map((m, idx) => (
+                            <div
+                              key={idx}
+                              className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 flex flex-col justify-between"
+                            >
+                              <span
+                                className={`text-2xl font-black tracking-tight ${
+                                  m.tone === 'amber'
+                                    ? 'text-amber-400'
+                                    : m.tone === 'indigo'
+                                    ? 'text-indigo-400'
+                                    : 'text-emerald-400'
+                                }`}
+                              >
+                                {m.value}
+                              </span>
+                              <span className="text-[11px] font-medium text-slate-300 mt-1 leading-tight">
+                                {m.label}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Legacy Trap vs Modern Playbook Matrix */}
+                      {infographicData.comparisonRows?.length > 0 && (
+                        <div className="rounded-xl overflow-hidden border border-slate-800 bg-slate-900/60">
+                          <div className="grid grid-cols-12 bg-slate-800/80 px-3.5 py-2 text-[10px] font-bold uppercase tracking-wider text-slate-300">
+                            <div className="col-span-3">Dimension</div>
+                            <div className="col-span-4 text-rose-300">❌ Legacy Trap</div>
+                            <div className="col-span-5 text-emerald-300">✓ Modern Playbook</div>
+                          </div>
+                          <div className="divide-y divide-slate-800/80 text-xs">
+                            {infographicData.comparisonRows.map((row, idx) => (
+                              <div key={idx} className="grid grid-cols-12 px-3.5 py-2.5 items-center gap-2">
+                                <div className="col-span-3 font-semibold text-slate-200 text-[11px]">
+                                  {row.dimension}
+                                </div>
+                                <div className="col-span-4 text-slate-400 text-[11px] leading-snug">
+                                  {row.legacyModel}
+                                </div>
+                                <div className="col-span-5 font-semibold text-emerald-300 text-[11px] leading-snug">
+                                  {row.modernPlaybook}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bottom-Line Executive Takeaway */}
+                      {infographicData.takeaway && (
+                        <div className="p-3.5 rounded-xl bg-indigo-950/70 border border-indigo-500/30 flex items-center justify-between gap-3">
+                          <div className="text-xs">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-300 block mb-0.5">
+                              Bottom-Line Rule
+                            </span>
+                            <p className="font-semibold text-white">{infographicData.takeaway}</p>
+                          </div>
+                          <span className="text-[10px] font-mono text-indigo-300/80 shrink-0">
+                            Grounded via Gemini Notebook
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

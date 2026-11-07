@@ -226,9 +226,153 @@ Output ONLY valid JSON in this exact structure:
       });
     }
 
+    // ---------------------------------------------------------
+    // ACTION 4: Generate 6-Slide Executive Carousel Deck + Post
+    // ---------------------------------------------------------
+    if (action === 'generate-carousel') {
+      const { sources = [], insight = '', preferredTopic = '' } = body;
+
+      if (!Array.isArray(sources) || (sources.length === 0 && !insight)) {
+        return NextResponse.json({ success: false, error: 'Please load at least one source or synthesis insight first' }, { status: 400 });
+      }
+
+      const sourcesSummary = sources
+        .slice(0, 4)
+        .map((s: any, i: number) => `Source ${i + 1} (${s.title}): ${s.content.substring(0, 1200)}`)
+        .join('\n\n');
+
+      const prompt = `You are an elite LinkedIn Visual Architect and Ghostwriter for ${userRole}.
+Transform the following grounded research into a high-impact 6-Slide LinkedIn PDF Carousel Deck AND a companion I-H-O-P post caption.
+
+${insight ? `CORE RESEARCH INSIGHT:\n${insight}\n` : ''}
+VERIFIED SOURCE CONTEXT:
+${sourcesSummary}
+
+${preferredTopic ? `PREFERRED TOPIC FOCUS: ${preferredTopic}` : ''}
+
+STRICT CAROUSEL RULES:
+1. Ground every metric, percentage, and claim strictly in the provided sources. Do NOT invent statistics.
+2. Create exactly 6 slides:
+   - Slide 1 (isTitle: true): High-tension Hook Headline (max 45 chars) + executive subtitle (max 90 chars).
+   - Slide 2: The Core Industry Contradiction / P&L Trap (with verified numbers from the sources).
+   - Slide 3: Playbook Step 1 — Concrete architectural or product shift.
+   - Slide 4: Playbook Step 2 — Operational or unit-economics rule.
+   - Slide 5: Playbook Step 3 — Strategic moat or monetization lever.
+   - Slide 6 (isCta: true): Executive Takeaway & peer discussion question.
+3. Also write a companion I-H-O-P LinkedIn post ("postBody") introducing the carousel:
+   - Line 1 MUST be under 40 characters so it stays on 1 visual mobile line.
+   - Line 2 MUST be under 50 characters and end with a colon (:) so both lines stay above LinkedIn's 3-line clamp!
+
+Output ONLY valid JSON in this exact format:
+{
+  "topic": "Clean topic headline",
+  "postBody": "Companion I-H-O-P LinkedIn post text with double newlines",
+  "slides": [
+    { "id": 1, "title": "Slide 1 Headline", "body": "Subtitle / framing", "isTitle": true },
+    { "id": 2, "title": "The Core Paradox", "body": "2-3 punchy sentences with verified stats" },
+    { "id": 3, "title": "01 / First Shift", "body": "Concrete rule and impact" },
+    { "id": 4, "title": "02 / Second Shift", "body": "Concrete rule and impact" },
+    { "id": 5, "title": "03 / Third Shift", "body": "Concrete rule and impact" },
+    { "id": 6, "title": "Executive Takeaway", "body": "Closing synthesis + peer question", "isCta": true }
+  ]
+}`;
+
+      const { text: rawJson } = await generateText({
+        model,
+        prompt,
+        temperature: 0.1,
+      });
+
+      const jsonMatch = rawJson.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Failed to parse carousel JSON from Gemini response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      return NextResponse.json({
+        success: true,
+        topic: parsed.topic || preferredTopic || 'Executive Carousel Deck',
+        postBody: parsed.postBody || '',
+        slides: Array.isArray(parsed.slides) ? parsed.slides : [],
+      });
+    }
+
+    // ---------------------------------------------------------
+    // ACTION 5: Generate Executive Infographic / Comparison Card
+    // ---------------------------------------------------------
+    if (action === 'generate-infographic') {
+      const { sources = [], insight = '', preferredTopic = '' } = body;
+
+      if (!Array.isArray(sources) || (sources.length === 0 && !insight)) {
+        return NextResponse.json({ success: false, error: 'Please load at least one source or synthesis insight first' }, { status: 400 });
+      }
+
+      const sourcesSummary = sources
+        .slice(0, 4)
+        .map((s: any, i: number) => `Source ${i + 1} (${s.title}): ${s.content.substring(0, 1200)}`)
+        .join('\n\n');
+
+      const prompt = `You are an elite Executive Data Visualizer for ${userRole}.
+Synthesize the loaded research sources into a high-signal LinkedIn Executive Infographic Card (Hero Metrics + Legacy vs. Modern Playbook Matrix + Bottom-Line Takeaway).
+
+${insight ? `CORE RESEARCH INSIGHT:\n${insight}\n` : ''}
+VERIFIED SOURCE CONTEXT:
+${sourcesSummary}
+
+${preferredTopic ? `PREFERRED TOPIC FOCUS: ${preferredTopic}` : ''}
+
+STRICT GROUNDING RULES:
+1. Extract 3 punchy hero metrics directly from the sources (if exact numbers aren't present, use sharp structural ratios like "0% MDR", "3x Cost", "100% Float").
+2. Build 3 high-contrast comparison rows contrasting the "Old / Legacy Trap" vs. the "Modern Executive Playbook".
+3. Provide a 1-sentence bottom-line executive rule.
+
+Output ONLY valid JSON in this exact format:
+{
+  "title": "Executive Infographic Headline (max 55 chars)",
+  "subtitle": "Grounded synthesis across verified research sources",
+  "metrics": [
+    { "value": "+68%", "label": "Short Metric Label", "tone": "emerald" },
+    { "value": "0%", "label": "Short Metric Label", "tone": "amber" },
+    { "value": "3.2x", "label": "Short Metric Label", "tone": "indigo" }
+  ],
+  "comparisonRows": [
+    { "dimension": "Primary Revenue", "legacyModel": "Old failing approach", "modernPlaybook": "New winning architecture" },
+    { "dimension": "Cost Structure", "legacyModel": "Old failing approach", "modernPlaybook": "New winning architecture" },
+    { "dimension": "Strategic Moat", "legacyModel": "Old failing approach", "modernPlaybook": "New winning architecture" }
+  ],
+  "takeaway": "One punchy, quotable executive rule summarizing the shift."
+}`;
+
+      const { text: rawJson } = await generateText({
+        model,
+        prompt,
+        temperature: 0.1,
+      });
+
+      const jsonMatch = rawJson.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('Failed to parse infographic JSON from Gemini response');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      return NextResponse.json({
+        success: true,
+        infographic: {
+          title: parsed.title || preferredTopic || 'Executive Architecture Matrix',
+          subtitle: parsed.subtitle || `Grounded synthesis for ${userRole}`,
+          metrics: Array.isArray(parsed.metrics) ? parsed.metrics.slice(0, 3) : [],
+          comparisonRows: Array.isArray(parsed.comparisonRows) ? parsed.comparisonRows.slice(0, 4) : [],
+          takeaway: parsed.takeaway || '',
+        },
+      });
+    }
+
     return NextResponse.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
   } catch (err: any) {
     console.error('[Gemini Notebook API Error]:', err);
     return NextResponse.json({ success: false, error: err.message || 'Internal server error' }, { status: 500 });
   }
 }
+

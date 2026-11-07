@@ -56,6 +56,7 @@ export function calculateLinkedInFold(
 
     const words = para.split(' ');
     let currentLineChars = 0;
+    let paraCharsConsumedBeforeCurrentLine = 0;
 
     for (let wIdx = 0; wIdx < words.length; wIdx++) {
       const word = words[wIdx];
@@ -64,10 +65,13 @@ export function calculateLinkedInFold(
       if (spaceNeeded > charsPerLine) {
         // Line wrapped to next visual line
         visualLinesUsed += 1;
+        const consumedInPara = paraCharsConsumedBeforeCurrentLine + currentLineChars;
         if (visualLinesUsed >= maxVisualLines) {
-          cutoffIndex = Math.min(cutoffIndex, currentOffset + currentLineChars);
+          cutoffIndex = Math.min(cutoffIndex, currentOffset + consumedInPara);
           break;
         }
+        // Advance past this wrapped line and the space before the next word
+        paraCharsConsumedBeforeCurrentLine = consumedInPara + 1;
         currentLineChars = word.length;
       } else {
         currentLineChars = spaceNeeded;
@@ -81,7 +85,10 @@ export function calculateLinkedInFold(
     // Finished paragraph's last line
     visualLinesUsed += 1;
     if (visualLinesUsed >= maxVisualLines) {
-      cutoffIndex = Math.min(cutoffIndex, currentOffset + currentLineChars);
+      cutoffIndex = Math.min(
+        cutoffIndex,
+        currentOffset + paraCharsConsumedBeforeCurrentLine + currentLineChars
+      );
       break;
     }
 

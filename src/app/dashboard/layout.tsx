@@ -10,6 +10,7 @@ import {
   Users, 
   BarChart3, 
   Radar,
+  Briefcase,
   Settings, 
   Brain, 
   ChevronLeft, 
@@ -24,6 +25,7 @@ const navigation = [
   { name: 'Influencers', href: '/dashboard/influencers', icon: Users },
   { name: 'Analytics', href: '/dashboard/analytics', icon: BarChart3 },
   { name: 'Radar', href: '/dashboard/radar', icon: Radar },
+  { name: 'Job Search', href: '/dashboard/jobs', icon: Briefcase },
   { name: 'Settings', href: '/dashboard/settings', icon: Settings },
 ];
 

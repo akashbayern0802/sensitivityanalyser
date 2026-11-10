@@ -281,3 +281,47 @@ model HallucinationAuditLog {
   status           String   // 'passed' | 'remediated' | 'rejected'
   createdAt        DateTime @default(now())
 }
+
+model JobSearchProfile {
+  id            String   @id @default(cuid())
+  userId        String   @default("user_mock_id")
+  name          String   // e.g. 'VP / Director of Product — FinTech & AI'
+  keywords      String   // e.g. 'Product Management, Payments, UPI, FinTech, Agentic AI'
+  location      String   @default("Bangalore, India")
+  workplaceType String   @default("Any") // 'Any' | 'Remote' | 'Hybrid' | 'On-site'
+  experience    String   @default("Executive / Lead") // 'Mid-Senior' | 'Director' | 'Executive / Lead'
+  apifyActorId  String   @default("bebity/linkedin-jobs-scraper")
+  scheduleTime  String   @default("08:30") // Daily feed sync time HH:mm
+  isActive      Boolean  @default(true)
+  lastSyncedAt  DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  jobs          JobPosting[]
+}
+
+model JobPosting {
+  id                String   @id @default(cuid())
+  profileId         String?
+  externalId        String?  @unique
+  title             String
+  company           String
+  companyLogo       String?
+  location          String
+  workplaceType     String?  // 'Remote' | 'Hybrid' | 'On-site'
+  postedAt          String?  // e.g. '4 hours ago' or ISO string
+  salaryRange       String?
+  jobUrl            String
+  description       String
+  source            String   @default("apify-linkedin") // 'apify-linkedin' | 'apify-indeed' | 'google-jobs-fallback'
+  matchScore        Int      @default(85)               // 0 - 100
+  matchReasons      String   @default("[]")             // JSON string[]
+  missingGaps       String   @default("[]")             // JSON string[]
+  outreachDraft     String?                             // Hiring Manager DM / cover hook
+  authorityPostIdea String?                             // LinkedIn post idea to attract this company
+  status            String   @default("new")            // 'new' | 'saved' | 'applied' | 'archived'
+  syncedDate        String                              // YYYY-MM-DD for daily feed grouping
+  createdAt         DateTime @default(now())
+
+  profile           JobSearchProfile? @relation(fields: [profileId], references: [id], onDelete: SetNull)
+}

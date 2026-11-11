@@ -111,21 +111,72 @@ export default function JobSearchPage() {
   const [addingCrmJobId, setAddingCrmJobId] = useState<string | null>(null);
   const [addedCrmJobIds, setAddedCrmJobIds] = useState<string[]>([]);
 
-  const resolveSafeJobUrl = (job: JobPosting) => {
-    // If Apify returned a direct job posting view link (e.g. /jobs/view/...), use it directly
-    if (job.jobUrl && !job.jobUrl.includes('/jobs/search/?')) {
-      return job.jobUrl;
-    }
-    // Otherwise normalize multi-city locations and quote the company name so LinkedIn never falls back to an unrelated WhatsApp job
+  const getMultiPortalLinks = (job: JobPosting) => {
     const cleanRole = job.title.split('—')[0].split('(')[0].trim();
     const cleanCompany = job.company.trim();
     const rawLoc = job.location || 'India';
-    const normalizedLocation =
-      rawLoc.includes(',') && rawLoc.split(',').length > 2
-        ? 'India'
-        : rawLoc.split(',')[0]?.trim() || 'India';
-    const query = `"${cleanCompany}" ${cleanRole}`;
-    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(normalizedLocation)}`;
+    const parts = rawLoc
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const primaryCity = parts[0] || 'Bengaluru';
+    const country = parts.length > 2 ? 'India' : parts[1] || 'India';
+
+    const roleSlug = `${cleanRole}-${cleanCompany}`
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+
+    const linkedinUrl =
+      job.jobUrl && job.jobUrl.includes('linkedin.com/jobs/view')
+        ? job.jobUrl
+        : `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(
+            `"${cleanCompany}" "${cleanRole}"`
+          )}&location=${encodeURIComponent(country)}`;
+
+    const naukriUrl =
+      job.jobUrl && job.jobUrl.includes('naukri.com')
+        ? job.jobUrl
+        : `https://www.naukri.com/${encodeURIComponent(roleSlug)}-jobs?k=${encodeURIComponent(
+            `${cleanRole} ${cleanCompany}`
+          )}&l=${encodeURIComponent(primaryCity.toLowerCase())}`;
+
+    const indeedUrl =
+      job.jobUrl && job.jobUrl.includes('indeed.')
+        ? job.jobUrl
+        : `https://in.indeed.com/jobs?q=${encodeURIComponent(
+            `"${cleanCompany}" ${cleanRole}`
+          )}&l=${encodeURIComponent(primaryCity)}`;
+
+    const googleJobsUrl = `https://www.google.com/search?q=${encodeURIComponent(
+      `"${cleanCompany}" "${cleanRole}" jobs in ${primaryCity} ${country}`
+    )}&ibp=htl;jobs`;
+
+    const isDirectAtsOrPortalUrl =
+      job.jobUrl &&
+      !job.jobUrl.includes('linkedin.com/jobs/search') &&
+      !job.jobUrl.includes('vertexaisearch.cloud.google.com');
+
+    const primaryUrl = isDirectAtsOrPortalUrl ? job.jobUrl : googleJobsUrl;
+
+    let primaryLabel = 'View on Google Jobs';
+    if (primaryUrl.includes('naukri.com')) primaryLabel = 'Apply on Naukri';
+    else if (primaryUrl.includes('indeed.')) primaryLabel = 'Apply on Indeed';
+    else if (primaryUrl.includes('linkedin.com/jobs/view')) primaryLabel = 'Direct LinkedIn Job';
+    else if (primaryUrl.includes('greenhouse.io')) primaryLabel = 'Apply on Greenhouse';
+    else if (primaryUrl.includes('lever.co')) primaryLabel = 'Apply on Lever';
+    else if (primaryUrl.includes('wellfound.com')) primaryLabel = 'Apply on Wellfound';
+    else if (primaryUrl.includes('instahyre.com')) primaryLabel = 'Apply on Instahyre';
+    else if (!primaryUrl.includes('google.com/search')) primaryLabel = `Apply (${job.source || 'Direct'})`;
+
+    return {
+      primaryUrl,
+      primaryLabel,
+      linkedinUrl,
+      naukriUrl,
+      indeedUrl,
+      googleJobsUrl,
+    };
   };
 
   const getLLMConfig = () => {
@@ -794,6 +845,9 @@ export default function JobSearchPage() {
                       <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-base font-bold text-gray-900">{job.title}</h3>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            🌐 {job.source || 'Multi-Portal'}
+                          </span>
                           {job.status === 'saved' && (
                             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">
                               ★ Saved
@@ -894,50 +948,90 @@ export default function JobSearchPage() {
 
                   {/* Action Toolbar */}
                   <div className="pt-2 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <a
-                        href={resolveSafeJobUrl(job)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3.5 py-1.5 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
-                      >
-                        <span>View / Apply on LinkedIn</span>
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </a>
+                    {(() => {
+                      const portalLinks = getMultiPortalLinks(job);
+                      return (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Primary Exact Match / ATS / Google Jobs Button */}
+                          <a
+                            href={portalLinks.primaryUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3.5 py-1.5 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors shadow-2xs"
+                          >
+                            <span>{portalLinks.primaryLabel}</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
 
-                      <button
-                        type="button"
-                        onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
-                        className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
-                      >
-                        <span>Warm Hiring Manager DM &amp; Prep</span>
-                        {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                      </button>
+                          {/* Multi-Portal Direct Links: Naukri, Indeed, LinkedIn */}
+                          <a
+                            href={portalLinks.naukriUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-200 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+                            title={`Search ${job.title} at ${job.company} on Naukri.com`}
+                          >
+                            <span>Naukri</span>
+                            <ExternalLink className="w-3 h-3 opacity-70" />
+                          </a>
 
-                      <button
-                        type="button"
-                        onClick={() => handleAddHiringTeamToCrm(job)}
-                        disabled={addingCrmJobId === job.id || addedCrmJobIds.includes(job.id)}
-                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
-                          addedCrmJobIds.includes(job.id)
-                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
-                            : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200'
-                        }`}
-                      >
-                        {addingCrmJobId === job.id ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : addedCrmJobIds.includes(job.id) ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <Users className="w-3.5 h-3.5" />
-                        )}
-                        <span>
-                          {addedCrmJobIds.includes(job.id)
-                            ? `Added ${job.company} to CRM`
-                            : `+ Add ${job.company} to CRM`}
-                        </span>
-                      </button>
-                    </div>
+                          <a
+                            href={portalLinks.indeedUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+                            title={`Search ${job.title} at ${job.company} on Indeed`}
+                          >
+                            <span>Indeed</span>
+                            <ExternalLink className="w-3 h-3 opacity-70" />
+                          </a>
+
+                          <a
+                            href={portalLinks.linkedinUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+                            title={`Search ${job.title} at ${job.company} on LinkedIn`}
+                          >
+                            <span>LinkedIn</span>
+                            <ExternalLink className="w-3 h-3 opacity-70" />
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
+                            className="px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-900 border border-indigo-200 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
+                          >
+                            <span>Warm DM &amp; Prep</span>
+                            {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleAddHiringTeamToCrm(job)}
+                            disabled={addingCrmJobId === job.id || addedCrmJobIds.includes(job.id)}
+                            className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                              addedCrmJobIds.includes(job.id)
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                                : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200'
+                            }`}
+                          >
+                            {addingCrmJobId === job.id ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : addedCrmJobIds.includes(job.id) ? (
+                              <Check className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Users className="w-3.5 h-3.5" />
+                            )}
+                            <span>
+                              {addedCrmJobIds.includes(job.id)
+                                ? `Added ${job.company} to CRM`
+                                : `+ Add ${job.company} to CRM`}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })()}
 
                     <div className="flex items-center gap-1.5">
                       <button

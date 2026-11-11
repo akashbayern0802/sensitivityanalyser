@@ -476,6 +476,13 @@ export async function POST(req: Request) {
       const diagnosticMessages: string[] = [];
       let usedApifyLiveAny = false;
 
+      // Clean up legacy simulated `apify_sim_` rows that haven't been saved or applied
+      try {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM "JobPosting" WHERE "externalId" LIKE 'apify_sim_%' AND "status" = 'new'`
+        );
+      } catch {}
+
       for (const profile of targetProfiles) {
         const effectiveActorId = actorIdOverride || profile.apifyActorId || 'bebity/linkedin-jobs-scraper';
 

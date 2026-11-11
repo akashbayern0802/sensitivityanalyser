@@ -109,6 +109,24 @@ export default function JobSearchPage() {
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [addingCrmJobId, setAddingCrmJobId] = useState<string | null>(null);
+  const [addedCrmJobIds, setAddedCrmJobIds] = useState<string[]>([]);
+
+  const resolveSafeJobUrl = (job: JobPosting) => {
+    // If Apify returned a direct job posting view link (e.g. /jobs/view/...), use it directly
+    if (job.jobUrl && !job.jobUrl.includes('/jobs/search/?')) {
+      return job.jobUrl;
+    }
+    // Otherwise normalize multi-city locations and quote the company name so LinkedIn never falls back to an unrelated WhatsApp job
+    const cleanRole = job.title.split('—')[0].split('(')[0].trim();
+    const cleanCompany = job.company.trim();
+    const rawLoc = job.location || 'India';
+    const normalizedLocation =
+      rawLoc.includes(',') && rawLoc.split(',').length > 2
+        ? 'India'
+        : rawLoc.split(',')[0]?.trim() || 'India';
+    const query = `"${cleanCompany}" ${cleanRole}`;
+    return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(normalizedLocation)}`;
+  };
 
   const getLLMConfig = () => {
     if (typeof window === 'undefined') return undefined;
@@ -304,28 +322,31 @@ export default function JobSearchPage() {
   const handleAddHiringTeamToCrm = async (job: JobPosting) => {
     setAddingCrmJobId(job.id);
     try {
-      const res = await fetch('/api/influencers', {
+      const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: `${job.company} Hiring Leader (${job.title.slice(0, 28)})`,
-          linkedinUrl: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
-            `${job.company} VP Product Head of Product`
-          )}`,
-          headline: `Hiring Leader for ${job.title} at ${job.company}`,
-          companyName: job.company,
-          status: 'inbox',
-          interests: [job.company, job.title],
+          action: 'add-to-crm',
+          company: job.company,
+          title: job.title,
         }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAddedCrmJobIds((prev) => [...prev, job.id]);
         setSyncBanner({
           type: 'success',
-          text: `✓ Added ${job.company} Hiring Team to your Influencer CRM Inbox for warm engagement!`,
+          text: `✓ Added ${job.company} Product & Hiring Leadership to your Influencer CRM (Qualified Influencers → Pipeline Inbox)!`,
         });
+      } else {
+        throw new Error(data.error || 'Failed to add to CRM');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to add to CRM', e);
+      setSyncBanner({
+        type: 'error',
+        text: e.message || 'Could not add company to CRM',
+      });
     } finally {
       setAddingCrmJobId(null);
     }
@@ -875,7 +896,7 @@ export default function JobSearchPage() {
                   <div className="pt-2 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
                     <div className="flex items-center gap-2 flex-wrap">
                       <a
-                        href={job.jobUrl}
+                        href={resolveSafeJobUrl(job)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="px-3.5 py-1.5 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
@@ -896,15 +917,25 @@ export default function JobSearchPage() {
                       <button
                         type="button"
                         onClick={() => handleAddHiringTeamToCrm(job)}
-                        disabled={addingCrmJobId === job.id}
-                        className="px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 text-xs font-semibold inline-flex items-center gap-1.5 transition-colors"
+                        disabled={addingCrmJobId === job.id || addedCrmJobIds.includes(job.id)}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-semibold inline-flex items-center gap-1.5 transition-colors ${
+                          addedCrmJobIds.includes(job.id)
+                            ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+                            : 'bg-purple-50 hover:bg-purple-100 text-purple-900 border-purple-200'
+                        }`}
                       >
                         {addingCrmJobId === job.id ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : addedCrmJobIds.includes(job.id) ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
                         ) : (
                           <Users className="w-3.5 h-3.5" />
                         )}
-                        <span>+ Add {job.company} to CRM</span>
+                        <span>
+                          {addedCrmJobIds.includes(job.id)
+                            ? `Added ${job.company} to CRM`
+                            : `+ Add ${job.company} to CRM`}
+                        </span>
                       </button>
                     </div>
 

@@ -604,6 +604,48 @@ export async function POST(req: Request) {
       return NextResponse.json({ success: true, job: updated });
     }
 
+    // ---------------------------------------------------------
+    // ACTION 5: Add Company Hiring Team to Influencer CRM Inbox
+    // ---------------------------------------------------------
+    if (action === 'add-to-crm') {
+      const { company, title } = body;
+      if (!company) {
+        return NextResponse.json({ success: false, error: 'Company is required' }, { status: 400 });
+      }
+
+      const cleanRole = (title || 'Product Leadership').split('—')[0].split('(')[0].trim();
+      const linkedinSearchUrl = `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(
+        `"${company}" ("VP Product" OR "Head of Product" OR "Director of Product" OR "CTO")`
+      )}`;
+
+      const contactName = `${company} — Product & Hiring Leadership`;
+      const headline = `Hiring Decision Makers for ${cleanRole} at ${company}`;
+
+      const savedContact = await prisma.influencer.upsert({
+        where: { linkedinUrl: linkedinSearchUrl },
+        update: {
+          name: contactName,
+          headline,
+          companyName: company,
+          isSaved: true,
+          status: 'inbox',
+        },
+        create: {
+          name: contactName,
+          linkedinUrl: linkedinSearchUrl,
+          headline,
+          companyName: company,
+          interests: JSON.stringify([company, cleanRole]),
+          relevanceScore: 0.95,
+          isSaved: true,
+          status: 'inbox',
+          source: 'job-radar',
+        },
+      });
+
+      return NextResponse.json({ success: true, influencer: savedContact });
+    }
+
     return NextResponse.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
   } catch (err: any) {
     console.error('[POST /api/jobs Error]:', err);

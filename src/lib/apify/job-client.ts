@@ -242,6 +242,22 @@ export async function fetchJobsViaApify(options: ApifyJobSearchOptions): Promise
 }
 
 /**
+ * Builds a clean LinkedIn Jobs search URL that normalizes multi-city strings
+ * (e.g., "Bengaluru, Hyderabad, Pune, Mumbai, Kolkata, Chennai" -> "India")
+ * and quotes the company name so LinkedIn never falls back to a random featured job like WhatsApp.
+ */
+export function buildTargetedJobSearchUrl(roleTitle: string, companyName: string, rawLocation: string): string {
+  const cleanRole = roleTitle.split('—')[0].split('(')[0].trim();
+  const cleanCompany = companyName.trim();
+  const normalizedLocation = rawLocation.includes(',') && rawLocation.split(',').length > 2
+    ? 'India'
+    : (rawLocation.split(',')[0]?.trim() || 'India');
+
+  const query = `"${cleanCompany}" ${cleanRole}`;
+  return `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(query)}&location=${encodeURIComponent(normalizedLocation)}`;
+}
+
+/**
  * Fetches live job openings and hiring announcements from Google News RSS + curated high-signal roles
  * matching the user's target keywords and location.
  */
@@ -255,8 +271,9 @@ async function fetchLiveWebJobFeedFallback(
 
   try {
     const primaryKeyword = keywords.split(',')[0]?.trim() || 'Product Manager';
+    const primaryCity = location.split(',')[0]?.trim() || 'India';
     const q = encodeURIComponent(
-      `("${primaryKeyword}" OR "VP Product" OR "Director of Product" OR "Head of Product") "${location.split(',')[0]}" (hiring OR job OR careers OR openings)`
+      `("${primaryKeyword}" OR "VP Product" OR "Director of Product" OR "Head of Product") "${primaryCity}" (hiring OR job OR careers OR openings)`
     );
     const rssUrl = `https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`;
     const feedItems = await scanRSSFeed(rssUrl, 'Live Job Feed');
@@ -273,7 +290,7 @@ async function fetchLiveWebJobFeedFallback(
         location,
         workplaceType: workplaceType === 'Any' ? 'Hybrid' : workplaceType,
         postedAt: 'Today (Live Signal)',
-        jobUrl: item.url || `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(keywords)}&location=${encodeURIComponent(location)}`,
+        jobUrl: item.url || buildTargetedJobSearchUrl(primaryKeyword, companyName, location),
         description: item.summary || cleanTitle,
         source: 'apify-hybrid-discovery',
       });
@@ -299,7 +316,7 @@ async function fetchLiveWebJobFeedFallback(
       workplaceType: 'Hybrid',
       postedAt: '3 hours ago',
       salaryRange: '₹85L – ₹1.3Cr + ESOPs',
-      jobUrl: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent('Director of Product Payments Razorpay')}&location=${encodeURIComponent(location)}`,
+      jobUrl: buildTargetedJobSearchUrl('Director of Product Payments', 'Razorpay', location),
       description: `Lead the core payment routing, UPI high-concurrency ledger, and merchant monetization charter. Requires deep experience in Indian digital banking products, zero-MDR monetization via embedded credit/float, and scaling 10,000+ TPS payment infrastructure with strict unit economics.`,
       source: 'apify:bebity/linkedin-jobs-scraper',
     },
@@ -311,7 +328,7 @@ async function fetchLiveWebJobFeedFallback(
       workplaceType: 'On-site',
       postedAt: '6 hours ago',
       salaryRange: '₹90L – ₹1.4Cr',
-      jobUrl: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent('Head of Product Lending PhonePe')}&location=${encodeURIComponent(location)}`,
+      jobUrl: buildTargetedJobSearchUrl('Head of Product Lending', 'PhonePe', location),
       description: `Own the end-to-end P&L for merchant working-capital lending and real-time underwriting APIs built on UPI transaction velocity. Partner with NBFCs and Tier-1 banks on co-lending architecture, credit risk guardrails, and automated collections.`,
       source: 'apify:bebity/linkedin-jobs-scraper',
     },
@@ -323,7 +340,7 @@ async function fetchLiveWebJobFeedFallback(
       workplaceType: 'Remote',
       postedAt: '9 hours ago',
       salaryRange: '₹1.1Cr – ₹1.6Cr',
-      jobUrl: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent('Principal Product Manager Stripe India')}&location=${encodeURIComponent(location)}`,
+      jobUrl: buildTargetedJobSearchUrl('Product Manager Payments', 'Stripe', location),
       description: `Architect cross-border settlement, automated FX treasury, and real-time payment rail integrations across India and SEA. Looking for product leaders who have scaled regulated banking or payment aggregator platforms from 0 to multi-billion TPV.`,
       source: 'apify:curious_coder/linkedin-jobs-scraper',
     },
@@ -335,7 +352,7 @@ async function fetchLiveWebJobFeedFallback(
       workplaceType: 'On-site',
       postedAt: '12 hours ago',
       salaryRange: '₹1.0Cr – ₹1.5Cr + Equity',
-      jobUrl: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent('VP Product CRED Bangalore')}&location=${encodeURIComponent(location)}`,
+      jobUrl: buildTargetedJobSearchUrl('Product Lead', 'CRED', location),
       description: `Drive AI-native financial advisory, credit optimization, and high-trust consumer fintech experiences for affluent India. Combine deterministic risk guardrails with LLM agent workflows across credit, wealth, and Account Aggregator (AA) rails.`,
       source: 'apify:bebity/linkedin-jobs-scraper',
     },
@@ -347,7 +364,7 @@ async function fetchLiveWebJobFeedFallback(
       workplaceType: 'Hybrid',
       postedAt: '14 hours ago',
       salaryRange: '₹75L – ₹1.15Cr',
-      jobUrl: `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(focusRole + ' Juspay')}&location=${encodeURIComponent(location)}`,
+      jobUrl: buildTargetedJobSearchUrl('Product Payments', 'Juspay', location),
       description: `Scale global payment orchestration, smart routing algorithms, and sub-second checkout reliability. Work closely with enterprise merchants and banking partners to optimize conversion rates and reduce cloud infrastructure cost per transaction.`,
       source: 'apify:bebity/linkedin-jobs-scraper',
     },

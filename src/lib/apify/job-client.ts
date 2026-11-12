@@ -185,20 +185,64 @@ function buildActorInputPayload(
 
   const lowerActor = actorId.toLowerCase();
 
-  // 1. Indeed Scraper (misceres/indeed-scraper)
+  // 1. Naukri.com Scrapers (all_rounder/naukri-jobs-scraper, easyapi/naukri-jobs-scraper, etc.)
+  if (lowerActor.includes('naukri')) {
+    const roleSlug = compactQuery
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    const naukriSearchUrl = `https://www.naukri.com/${encodeURIComponent(roleSlug)}-jobs-in-${encodeURIComponent(
+      primaryCity.toLowerCase()
+    )}?k=${encodeURIComponent(compactQuery)}&l=${encodeURIComponent(primaryCity.toLowerCase())}`;
+
+    return {
+      keyword: compactQuery,
+      keywords: compactQuery,
+      query: compactQuery,
+      location: primaryCity,
+      searchUrl: naukriSearchUrl,
+      startUrls: [{ url: naukriSearchUrl }],
+      urls: [naukriSearchUrl],
+      maxItems,
+      maxResults: maxItems,
+      limit: maxItems,
+      proxyConfiguration: {
+        useApifyProxy: true,
+      },
+    };
+  }
+
+  // 2. Indeed Scrapers (misceres/indeed-scraper, borderline/indeed-scraper, etc.)
   if (lowerActor.includes('indeed')) {
+    const indeedSearchUrl = `https://in.indeed.com/jobs?q=${encodeURIComponent(
+      compactQuery
+    )}&l=${encodeURIComponent(primaryCity)}`;
     return {
       position: compactQuery,
+      query: compactQuery,
       country: country.toLowerCase().includes('india') ? 'IN' : 'US',
       location: primaryCity,
+      startUrls: [{ url: indeedSearchUrl }],
       maxItems,
+      maxConcurrency: 5,
       parseCompanyDetails: false,
       saveOnlyUniqueItems: true,
       followApplyRedirects: false,
     };
   }
 
-  // 2. Google Jobs Scraper (epctex/google-jobs-scraper or similar)
+  // 3. Wellfound / Instahyre / Glassdoor Scrapers
+  if (lowerActor.includes('wellfound') || lowerActor.includes('glassdoor') || lowerActor.includes('instahyre')) {
+    return {
+      keyword: compactQuery,
+      query: compactQuery,
+      location: primaryCity,
+      maxItems,
+      limit: maxItems,
+    };
+  }
+
+  // 4. Google Jobs Scraper (epctex/google-jobs-scraper or similar)
   if (lowerActor.includes('google-jobs')) {
     return {
       queries: [`${compactQuery} jobs in ${primaryCity}, ${country}`],

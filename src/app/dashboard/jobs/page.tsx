@@ -69,8 +69,12 @@ interface JobPosting {
 const APIFY_ACTORS = [
   { id: 'bebity/linkedin-jobs-scraper', label: 'LinkedIn Jobs Scraper (bebity/linkedin-jobs-scraper)' },
   { id: 'curious_coder/linkedin-jobs-scraper', label: 'LinkedIn Jobs Fast (curious_coder/linkedin-jobs-scraper)' },
+  { id: 'all_rounder/naukri-jobs-scraper', label: 'Naukri.com Jobs Scraper (all_rounder/naukri-jobs-scraper)' },
+  { id: 'easyapi/naukri-jobs-scraper', label: 'Naukri.com Fast Scraper (easyapi/naukri-jobs-scraper)' },
   { id: 'misceres/indeed-scraper', label: 'Indeed Jobs Scraper (misceres/indeed-scraper)' },
+  { id: 'borderline/indeed-scraper', label: 'Indeed India & Global Scraper (borderline/indeed-scraper)' },
   { id: 'epctex/google-jobs-scraper', label: 'Google Jobs Aggregator (epctex/google-jobs-scraper)' },
+  { id: 'shahidirfan/Glassdoor-Jobs-Scraper', label: 'Glassdoor Jobs Scraper (shahidirfan/Glassdoor-Jobs-Scraper)' },
 ];
 
 const WORKPLACE_OPTIONS = [
@@ -100,15 +104,14 @@ function MultiSelectDropdown({
 
   const toggleItem = (id: string) => {
     if (selected.includes(id)) {
-      if (selected.length > 1) {
-        onChange(selected.filter((item) => item !== id));
-      }
+      onChange(selected.filter((item) => item !== id));
     } else {
       onChange([...selected, id]);
     }
   };
 
   const selectAll = () => onChange(options.map((o) => o.id));
+  const clearAll = () => onChange([]);
 
   const summaryText =
     selected.length === 0
@@ -136,37 +139,50 @@ function MultiSelectDropdown({
       </button>
 
       {open && (
-        <div className="absolute z-30 mt-1.5 w-full rounded-xl bg-slate-900 border border-slate-700 shadow-xl p-2 space-y-1">
+        <div className="absolute z-30 mt-1.5 w-full rounded-xl bg-slate-900 border border-slate-700 shadow-2xl p-2 space-y-1 max-h-64 overflow-y-auto">
           <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800 text-[10px] text-slate-400">
-            <span>Select one or more</span>
-            <button
-              type="button"
-              onClick={selectAll}
-              className="text-indigo-400 hover:text-indigo-300 font-semibold"
-            >
-              Select All
-            </button>
+            <span>{selected.length} of {options.length} selected</span>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={selectAll}
+                className="text-indigo-400 hover:text-indigo-300 font-semibold cursor-pointer"
+              >
+                Select All
+              </button>
+              <button
+                type="button"
+                onClick={clearAll}
+                className="text-rose-400 hover:text-rose-300 font-semibold cursor-pointer"
+              >
+                Clear All
+              </button>
+            </div>
           </div>
           {options.map((opt) => {
             const isChecked = selected.includes(opt.id);
             return (
-              <label
+              <button
                 key={opt.id}
+                type="button"
                 onClick={() => toggleItem(opt.id)}
-                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs text-left cursor-pointer transition-colors ${
                   isChecked
                     ? 'bg-indigo-600/25 text-white font-semibold'
                     : 'text-slate-300 hover:bg-slate-800'
                 }`}
               >
-                <input
-                  type="checkbox"
-                  checked={isChecked}
-                  onChange={() => {}}
-                  className="rounded border-slate-600 text-indigo-600 focus:ring-0 pointer-events-none"
-                />
+                <div
+                  className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 transition-colors ${
+                    isChecked
+                      ? 'bg-indigo-600 border-indigo-500 text-white'
+                      : 'bg-slate-950 border-slate-600 text-transparent'
+                  }`}
+                >
+                  <Check className="w-3 h-3 stroke-[3]" />
+                </div>
                 <span className="truncate">{opt.label}</span>
-              </label>
+              </button>
             );
           })}
         </div>

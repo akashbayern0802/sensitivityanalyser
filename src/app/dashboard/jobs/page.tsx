@@ -107,11 +107,47 @@ export default function JobSearchPage() {
 
   // Expanded Job Card Details & Copy states
   const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
+  const [expandedDescIds, setExpandedDescIds] = useState<string[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [addingCrmJobId, setAddingCrmJobId] = useState<string | null>(null);
   const [addedCrmJobIds, setAddedCrmJobIds] = useState<string[]>([]);
 
-  const getMultiPortalLinks = (job: JobPosting) => {
+  /**
+   * Formats raw or previously saved single-line job descriptions (with inline `* ` bullets or section headers)
+   * into clean, structured paragraphs and bullet points.
+   */
+  const formatDescriptionForDisplay = (raw: string): string => {
+    if (!raw) return '';
+    let text = String(raw)
+      .replace(/<\s*br\s*\/?>/gi, '\n')
+      .replace(/<\s*\/p\s*>/gi, '\n\n')
+      .replace(/<\s*li[^>]*>/gi, '\n• ')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&');
+
+    text = text.replace(
+      /\s+(About The Team|About the Team|About The Role|About the Role|What Will You Do|What You Will Do|What You'll Do|What You Will Need|What You'll Need|Key Responsibilities|Responsibilities|Requirements|Qualifications|Minimum Qualifications|Preferred Qualifications|Who You Are|Why Join Us)\b/g,
+      '\n\n$1:\n'
+    );
+
+    text = text.replace(/\s+\*\s+(?=[A-Z0-9])/g, '\n• ');
+    text = text.replace(/\s+•\s+/g, '\n• ');
+
+    return text
+      .split('\n')
+      .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
+  /**
+   * Resolves ONLY the single relevant apply link for the portal where this job was sourced.
+   * E.g., if the job is from LinkedIn Jobs -> only show the LinkedIn link.
+   * If from Naukri -> only Naukri link. If from Indeed -> only Indeed link.
+   */
+  const getSingleRelevantPortalLink = (job: JobPosting) => {
     const cleanRole = job.title.split('—')[0].split('(')[0].trim();
     const cleanCompany = job.company.trim();
     const rawLoc = job.location || 'India';
@@ -122,60 +158,80 @@ export default function JobSearchPage() {
     const primaryCity = parts[0] || 'Bengaluru';
     const country = parts.length > 2 ? 'India' : parts[1] || 'India';
 
-    const roleSlug = `${cleanRole}-${cleanCompany}`
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '');
+    const sourceLower = (job.source || '').toLowerCase();
+    const urlLower = (job.jobUrl || '').toLowerCase();
 
-    const linkedinUrl =
-      job.jobUrl && job.jobUrl.includes('linkedin.com/jobs/view')
-        ? job.jobUrl
-        : `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(
-            `"${cleanCompany}" "${cleanRole}"`
-          )}&location=${encodeURIComponent(country)}`;
+    // 1. LinkedIn Jobs
+    if (sourceLower.includes('linkedin') || urlLower.includes('linkedin.com')) {
+      const url =
+        job.jobUrl && !urlLower.includes('linkedin.com/jobs/search')
+          ? job.jobUrl
+          : `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(
+              `"${cleanCompany}" "${cleanRole}"`
+            )}&location=${encodeURIComponent(country)}`;
+      return {
+        url,
+        label: 'View / Apply on LinkedIn',
+      };
+    }
 
-    const naukriUrl =
-      job.jobUrl && job.jobUrl.includes('naukri.com')
-        ? job.jobUrl
-        : `https://www.naukri.com/${encodeURIComponent(roleSlug)}-jobs?k=${encodeURIComponent(
-            `${cleanRole} ${cleanCompany}`
-          )}&l=${encodeURIComponent(primaryCity.toLowerCase())}`;
+    // 2. Naukri.com
+    if (sourceLower.includes('naukri') || urlLower.includes('naukri.com')) {
+      const roleSlug = `${cleanRole}-${cleanCompany}`
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-|-$/g, '');
+      const url =
+        job.jobUrl && urlLower.includes('naukri.com')
+          ? job.jobUrl
+          : `https://www.naukri.com/${encodeURIComponent(roleSlug)}-jobs?k=${encodeURIComponent(
+              `${cleanRole} ${cleanCompany}`
+            )}&l=${encodeURIComponent(primaryCity.toLowerCase())}`;
+      return {
+        url,
+        label: 'View / Apply on Naukri.com',
+      };
+    }
 
-    const indeedUrl =
-      job.jobUrl && job.jobUrl.includes('indeed.')
-        ? job.jobUrl
-        : `https://in.indeed.com/jobs?q=${encodeURIComponent(
-            `"${cleanCompany}" ${cleanRole}`
-          )}&l=${encodeURIComponent(primaryCity)}`;
+    // 3. Indeed
+    if (sourceLower.includes('indeed') || urlLower.includes('indeed.')) {
+      const url =
+        job.jobUrl && urlLower.includes('indeed.')
+          ? job.jobUrl
+          : `https://in.indeed.com/jobs?q=${encodeURIComponent(
+              `"${cleanCompany}" ${cleanRole}`
+            )}&l=${encodeURIComponent(primaryCity)}`;
+      return {
+        url,
+        label: 'View / Apply on Indeed',
+      };
+    }
 
-    const googleJobsUrl = `https://www.google.com/search?q=${encodeURIComponent(
-      `"${cleanCompany}" "${cleanRole}" jobs in ${primaryCity} ${country}`
-    )}&ibp=htl;jobs`;
-
-    const isDirectAtsOrPortalUrl =
+    // 4. Specific ATS or Portal (Wellfound, Instahyre, Greenhouse, Lever, Company Careers, Google Jobs)
+    if (
       job.jobUrl &&
-      !job.jobUrl.includes('linkedin.com/jobs/search') &&
-      !job.jobUrl.includes('vertexaisearch.cloud.google.com');
+      job.jobUrl.startsWith('http') &&
+      !urlLower.includes('vertexaisearch.cloud.google.com')
+    ) {
+      let portalName = job.source || 'Job Portal';
+      if (urlLower.includes('greenhouse.io')) portalName = 'Greenhouse';
+      else if (urlLower.includes('lever.co')) portalName = 'Lever';
+      else if (urlLower.includes('wellfound.com')) portalName = 'Wellfound';
+      else if (urlLower.includes('instahyre.com')) portalName = 'Instahyre';
+      else if (urlLower.includes('google.com/search')) portalName = 'Google Jobs';
 
-    const primaryUrl = isDirectAtsOrPortalUrl ? job.jobUrl : googleJobsUrl;
+      return {
+        url: job.jobUrl,
+        label: `View / Apply on ${portalName}`,
+      };
+    }
 
-    let primaryLabel = 'View on Google Jobs';
-    if (primaryUrl.includes('naukri.com')) primaryLabel = 'Apply on Naukri';
-    else if (primaryUrl.includes('indeed.')) primaryLabel = 'Apply on Indeed';
-    else if (primaryUrl.includes('linkedin.com/jobs/view')) primaryLabel = 'Direct LinkedIn Job';
-    else if (primaryUrl.includes('greenhouse.io')) primaryLabel = 'Apply on Greenhouse';
-    else if (primaryUrl.includes('lever.co')) primaryLabel = 'Apply on Lever';
-    else if (primaryUrl.includes('wellfound.com')) primaryLabel = 'Apply on Wellfound';
-    else if (primaryUrl.includes('instahyre.com')) primaryLabel = 'Apply on Instahyre';
-    else if (!primaryUrl.includes('google.com/search')) primaryLabel = `Apply (${job.source || 'Direct'})`;
-
+    // Default fallback to Google Jobs for that role
     return {
-      primaryUrl,
-      primaryLabel,
-      linkedinUrl,
-      naukriUrl,
-      indeedUrl,
-      googleJobsUrl,
+      url: `https://www.google.com/search?q=${encodeURIComponent(
+        `"${cleanCompany}" "${cleanRole}" jobs in ${primaryCity} ${country}`
+      )}&ibp=htl;jobs`,
+      label: `View / Apply (${job.source || 'Direct'})`,
     };
   };
 
@@ -905,8 +961,49 @@ export default function JobSearchPage() {
                     </div>
                   </div>
 
-                  {/* Description Snippet */}
-                  <p className="text-xs text-gray-700 leading-relaxed">{job.description}</p>
+                  {/* Formatted & Collapsible Description Snippet */}
+                  {(() => {
+                    const formattedDesc = formatDescriptionForDisplay(job.description);
+                    const isDescExpanded = expandedDescIds.includes(job.id);
+                    const isLongDesc = formattedDesc.length > 360 || formattedDesc.split('\n').length > 5;
+                    const displayDesc =
+                      isLongDesc && !isDescExpanded
+                        ? `${formattedDesc.slice(0, 360).trim()}...`
+                        : formattedDesc;
+
+                    return (
+                      <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
+                        <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-line font-sans">
+                          {displayDesc}
+                        </div>
+                        {isLongDesc && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpandedDescIds((prev) =>
+                                prev.includes(job.id)
+                                  ? prev.filter((id) => id !== job.id)
+                                  : [...prev, job.id]
+                              )
+                            }
+                            className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 inline-flex items-center gap-1"
+                          >
+                            {isDescExpanded ? (
+                              <>
+                                <span>Show concise summary</span>
+                                <ChevronUp className="w-3 h-3" />
+                              </>
+                            ) : (
+                              <>
+                                <span>Read full job description</span>
+                                <ChevronDown className="w-3 h-3" />
+                              </>
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Grounded Match Reasons Pills */}
                   {matchReasons.length > 0 && (
@@ -949,52 +1046,18 @@ export default function JobSearchPage() {
                   {/* Action Toolbar */}
                   <div className="pt-2 border-t border-gray-100 flex items-center justify-between flex-wrap gap-2">
                     {(() => {
-                      const portalLinks = getMultiPortalLinks(job);
+                      const portalLink = getSingleRelevantPortalLink(job);
                       return (
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          {/* Primary Exact Match / ATS / Google Jobs Button */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Single Relevant Portal Link */}
                           <a
-                            href={portalLinks.primaryUrl}
+                            href={portalLink.url}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="px-3.5 py-1.5 rounded-lg bg-gray-900 hover:bg-black text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors shadow-2xs"
                           >
-                            <span>{portalLinks.primaryLabel}</span>
+                            <span>{portalLink.label}</span>
                             <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-
-                          {/* Multi-Portal Direct Links: Naukri, Indeed, LinkedIn */}
-                          <a
-                            href={portalLinks.naukriUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2.5 py-1.5 rounded-lg bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-200 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
-                            title={`Search ${job.title} at ${job.company} on Naukri.com`}
-                          >
-                            <span>Naukri</span>
-                            <ExternalLink className="w-3 h-3 opacity-70" />
-                          </a>
-
-                          <a
-                            href={portalLinks.indeedUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2.5 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
-                            title={`Search ${job.title} at ${job.company} on Indeed`}
-                          >
-                            <span>Indeed</span>
-                            <ExternalLink className="w-3 h-3 opacity-70" />
-                          </a>
-
-                          <a
-                            href={portalLinks.linkedinUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 text-xs font-semibold inline-flex items-center gap-1 transition-colors"
-                            title={`Search ${job.title} at ${job.company} on LinkedIn`}
-                          >
-                            <span>LinkedIn</span>
-                            <ExternalLink className="w-3 h-3 opacity-70" />
                           </a>
 
                           <button

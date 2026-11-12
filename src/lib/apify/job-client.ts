@@ -242,6 +242,51 @@ function buildActorInputPayload(
 }
 
 /**
+ * Formats raw or flattened job descriptions (including Apify strings where HTML tags were stripped
+ * or `* ` bullets were flattened into a single line) into clean, readable paragraphs and bullet lists.
+ */
+export function formatJobDescriptionText(raw: string): string {
+  if (!raw) return '';
+
+  let text = String(raw)
+    // Convert block-level HTML tags to newlines before stripping remaining tags
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*\/p\s*>/gi, '\n\n')
+    .replace(/<\s*\/div\s*>/gi, '\n')
+    .replace(/<\s*\/h[1-6]\s*>/gi, '\n\n')
+    .replace(/<\s*li[^>]*>/gi, '\n• ')
+    .replace(/<\s*\/li\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, ' ')
+    // Decode common HTML entities
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'");
+
+  // Restore section headings that got concatenated inline
+  text = text.replace(
+    /\s+(About The Team|About the Team|About The Role|About the Role|What Will You Do|What You Will Do|What You'll Do|What You Will Need|What You'll Need|Key Responsibilities|Responsibilities|Requirements|Qualifications|Minimum Qualifications|Preferred Qualifications|Who You Are|Why Join Us)\b/g,
+    '\n\n$1\n'
+  );
+
+  // Convert inline `* ` or `• ` bullet markers into proper newline bullets
+  text = text.replace(/\s+\*\s+(?=[A-Z0-9])/g, '\n• ');
+  text = text.replace(/\s+•\s+/g, '\n• ');
+
+  // Normalize horizontal spaces while preserving newlines
+  text = text
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return text;
+}
+
+/**
  * Normalizes arbitrary Apify Actor JSON items into our unified RawApifyJob shape.
  */
 export function normalizeApifyJobItem(item: any, defaultLocation: string, actorId: string): RawApifyJob | null {
@@ -279,7 +324,8 @@ export function normalizeApifyJobItem(item: any, defaultLocation: string, actorI
     item.jobLocation ||
     defaultLocation;
 
-  const description =
+  const rawDescription =
+    item.descriptionHtml ||
     item.description ||
     item.descriptionText ||
     item.jobDescription ||
@@ -305,9 +351,9 @@ export function normalizeApifyJobItem(item: any, defaultLocation: string, actorI
   const workplaceType =
     item.workplaceType ||
     item.workType ||
-    (description.toLowerCase().includes('remote')
+    (String(rawDescription).toLowerCase().includes('remote')
       ? 'Remote'
-      : description.toLowerCase().includes('hybrid')
+      : String(rawDescription).toLowerCase().includes('hybrid')
       ? 'Hybrid'
       : 'On-site');
 
@@ -331,7 +377,7 @@ export function normalizeApifyJobItem(item: any, defaultLocation: string, actorI
     postedAt: String(postedAt),
     salaryRange: salaryRange ? String(salaryRange) : undefined,
     jobUrl: String(jobUrl).trim(),
-    description: String(description).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(),
+    description: formatJobDescriptionText(String(rawDescription)),
     source: portalName,
   };
 }

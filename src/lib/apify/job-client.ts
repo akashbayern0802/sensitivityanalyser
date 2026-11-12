@@ -543,76 +543,88 @@ export async function fetchJobsViaApify(options: ApifyJobSearchOptions): Promise
   } = options;
 
   const resolvedToken = (apifyToken || process.env.APIFY_API_TOKEN || '').trim();
-  let apifyErrorDetail = '';
+  const actorIds = actorId
+    .split(',')
+    .map((a) => a.trim())
+    .filter(Boolean);
+  const targetActors = actorIds.length > 0 ? actorIds : ['bebity/linkedin-jobs-scraper'];
+  const itemsPerActor = Math.max(3, Math.ceil(maxItems / targetActors.length));
+
+  const aggregatedApifyJobs: RawApifyJob[] = [];
+  const apifyErrorDetails: string[] = [];
 
   if (resolvedToken) {
-    try {
-      const normalizedActor = actorId.replace('/', '~');
-      const actorPayload = buildActorInputPayload(actorId, keywords, location, maxItems);
+    for (const singleActorId of targetActors) {
+      try {
+        const normalizedActor = singleActorId.replace('/', '~');
+        const actorPayload = buildActorInputPayload(singleActorId, keywords, location, itemsPerActor);
 
-      const runUrl = `https://api.apify.com/v2/acts/${encodeURIComponent(
-        normalizedActor
-      )}/run-sync-get-dataset-items?token=${encodeURIComponent(resolvedToken)}&timeout=50`;
-
-      const res = await fetch(runUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(actorPayload),
-      });
-
-      if (res.ok) {
-        const items = await res.json();
-        if (Array.isArray(items) && items.length > 0) {
-          const normalized = items
-            .map((item) => normalizeApifyJobItem(item, location, actorId))
-            .filter((j): j is RawApifyJob => j !== null)
-            .slice(0, maxItems);
-
-          if (normalized.length > 0) {
-            return {
-              jobs: normalized,
-              usedApifyLive: true,
-              diagnosticMessage: `Fetched ${normalized.length} live jobs directly from Apify Actor (${actorId}).`,
-            };
-          } else {
-            apifyErrorDetail = `Apify Actor (${actorId}) finished but returned 0 matching items for that query.`;
-          }
-        } else {
-          apifyErrorDetail = `Apify Actor (${actorId}) returned an empty dataset.`;
-        }
-      } else {
-        const errJson = await res.json().catch(() => ({}));
-        const apiMsg = errJson?.error?.message || `HTTP ${res.status}`;
-        apifyErrorDetail = `Apify API notice (${actorId}): ${apiMsg}.`;
-
-        // Also check if the user has a recent succeeded dataset run on their Apify account
-        const lastRunUrl = `https://api.apify.com/v2/acts/${encodeURIComponent(
+        const runUrl = `https://api.apify.com/v2/acts/${encodeURIComponent(
           normalizedActor
-        )}/runs/last/dataset/items?token=${encodeURIComponent(resolvedToken)}&status=SUCCEEDED&limit=${maxItems}`;
+        )}/run-sync-get-dataset-items?token=${encodeURIComponent(resolvedToken)}&timeout=50`;
 
-        const lastRunRes = await fetch(lastRunUrl);
-        if (lastRunRes.ok) {
-          const lastItems = await lastRunRes.json();
-          if (Array.isArray(lastItems) && lastItems.length > 0) {
-            const normalized = lastItems
-              .map((item) => normalizeApifyJobItem(item, location, actorId))
+        const res = await fetch(runUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(actorPayload),
+        });
+
+        if (res.ok) {
+          const items = await res.json();
+          if (Array.isArray(items) && items.length > 0) {
+            const normalized = items
+              .map((item) => normalizeApifyJobItem(item, location, singleActorId))
               .filter((j): j is RawApifyJob => j !== null)
-              .slice(0, maxItems);
+              .slice(0, itemsPerActor);
 
             if (normalized.length > 0) {
-              return {
-                jobs: normalized,
-                usedApifyLive: true,
-                diagnosticMessage: `Loaded ${normalized.length} jobs from your latest Apify dataset (${actorId}).`,
-              };
+              aggregatedApifyJobs.push(...normalized);
+            } else {
+              apifyErrorDetails.push(`Actor (${singleActorId}) returned 0 matching items.`);
+            }
+          } else {
+            apifyErrorDetails.push(`Actor (${singleActorId}) returned an empty dataset.`);
+          }
+        } else {
+          const errJson = await res.json().catch(() => ({}));
+          const apiMsg = errJson?.error?.message || `HTTP ${res.status}`;
+          apifyErrorDetails.push(`Apify notice (${singleActorId}): ${apiMsg}`);
+
+          // Check if the user has a recent succeeded dataset run on their Apify account for this actor
+          const lastRunUrl = `https://api.apify.com/v2/acts/${encodeURIComponent(
+            normalizedActor
+          )}/runs/last/dataset/items?token=${encodeURIComponent(resolvedToken)}&status=SUCCEEDED&limit=${itemsPerActor}`;
+
+          const lastRunRes = await fetch(lastRunUrl);
+          if (lastRunRes.ok) {
+            const lastItems = await lastRunRes.json();
+            if (Array.isArray(lastItems) && lastItems.length > 0) {
+              const normalized = lastItems
+                .map((item) => normalizeApifyJobItem(item, location, singleActorId))
+                .filter((j): j is RawApifyJob => j !== null)
+                .slice(0, itemsPerActor);
+
+              if (normalized.length > 0) {
+                aggregatedApifyJobs.push(...normalized);
+              }
             }
           }
         }
+      } catch (err: any) {
+        apifyErrorDetails.push(`Apify error (${singleActorId}): ${err.message}`);
       }
-    } catch (err: any) {
-      apifyErrorDetail = `Apify connection error: ${err.message}.`;
+    }
+
+    if (aggregatedApifyJobs.length > 0) {
+      return {
+        jobs: aggregatedApifyJobs.slice(0, maxItems),
+        usedApifyLive: true,
+        diagnosticMessage: `Fetched ${aggregatedApifyJobs.length} live jobs across ${targetActors.length} Apify Actor(s) (${targetActors.join(', ')}).`,
+      };
     }
   }
+
+  const apifyErrorDetail = apifyErrorDetails.join(' | ');
 
   // Live Multi-Portal Grounded Search (LinkedIn, Naukri, Indeed, Greenhouse, Company Careers)
   const groundedJobs = await discoverRealMultiPortalJobsWithGemini(keywords, location, maxItems);

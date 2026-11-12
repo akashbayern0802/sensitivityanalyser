@@ -73,6 +73,108 @@ const APIFY_ACTORS = [
   { id: 'epctex/google-jobs-scraper', label: 'Google Jobs Aggregator (epctex/google-jobs-scraper)' },
 ];
 
+const WORKPLACE_OPTIONS = [
+  { id: 'Remote', label: 'Remote' },
+  { id: 'Hybrid', label: 'Hybrid' },
+  { id: 'On-site', label: 'On-site' },
+];
+
+const SENIORITY_OPTIONS = [
+  { id: 'Executive / Lead', label: 'Executive / VP / Head of Product' },
+  { id: 'Director', label: 'Director / Principal' },
+  { id: 'Mid-Senior', label: 'Senior / Staff PM' },
+];
+
+function MultiSelectDropdown({
+  options,
+  selected,
+  onChange,
+  placeholder,
+}: {
+  options: Array<{ id: string; label: string }>;
+  selected: string[];
+  onChange: (next: string[]) => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const toggleItem = (id: string) => {
+    if (selected.includes(id)) {
+      if (selected.length > 1) {
+        onChange(selected.filter((item) => item !== id));
+      }
+    } else {
+      onChange([...selected, id]);
+    }
+  };
+
+  const selectAll = () => onChange(options.map((o) => o.id));
+
+  const summaryText =
+    selected.length === 0
+      ? placeholder
+      : selected.length === options.length
+      ? `All Selected (${options.length})`
+      : selected
+          .map((id) => options.find((o) => o.id === id)?.label.split(' (')[0] || id)
+          .join(', ');
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 hover:border-indigo-400 text-xs text-white flex items-center justify-between gap-2 text-left transition-colors"
+      >
+        <span className="truncate">{summaryText}</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="px-1.5 py-0.2 rounded bg-indigo-500/30 text-indigo-200 text-[10px] font-bold">
+            {selected.length}
+          </span>
+          {open ? <ChevronUp className="w-3.5 h-3.5 text-slate-400" /> : <ChevronDown className="w-3.5 h-3.5 text-slate-400" />}
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute z-30 mt-1.5 w-full rounded-xl bg-slate-900 border border-slate-700 shadow-xl p-2 space-y-1">
+          <div className="flex items-center justify-between px-2 py-1 border-b border-slate-800 text-[10px] text-slate-400">
+            <span>Select one or more</span>
+            <button
+              type="button"
+              onClick={selectAll}
+              className="text-indigo-400 hover:text-indigo-300 font-semibold"
+            >
+              Select All
+            </button>
+          </div>
+          {options.map((opt) => {
+            const isChecked = selected.includes(opt.id);
+            return (
+              <label
+                key={opt.id}
+                onClick={() => toggleItem(opt.id)}
+                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                  isChecked
+                    ? 'bg-indigo-600/25 text-white font-semibold'
+                    : 'text-slate-300 hover:bg-slate-800'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isChecked}
+                  onChange={() => {}}
+                  className="rounded border-slate-600 text-indigo-600 focus:ring-0 pointer-events-none"
+                />
+                <span className="truncate">{opt.label}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function JobSearchPage() {
   const router = useRouter();
 
@@ -90,7 +192,10 @@ export default function JobSearchPage() {
   // Apify Credentials & Actor Drawer
   const [isApifyDrawerOpen, setIsApifyDrawerOpen] = useState(false);
   const [apifyToken, setApifyToken] = useState('');
-  const [selectedActorId, setSelectedActorId] = useState('bebity/linkedin-jobs-scraper');
+  const [selectedActorIds, setSelectedActorIds] = useState<string[]>([
+    'bebity/linkedin-jobs-scraper',
+    'epctex/google-jobs-scraper',
+  ]);
   const [autoDailySync, setAutoDailySync] = useState(true);
 
   // New Search Profile Modal / Drawer
@@ -99,9 +204,8 @@ export default function JobSearchPage() {
     name: '',
     keywords: '',
     location: 'Bangalore, India',
-    workplaceType: 'Any',
-    experience: 'Executive / Lead',
-    apifyActorId: 'bebity/linkedin-jobs-scraper',
+    workplaceTypes: ['Remote', 'Hybrid', 'On-site'],
+    experiences: ['Executive / Lead', 'Director'],
     scheduleTime: '08:30',
   });
 
@@ -248,22 +352,31 @@ export default function JobSearchPage() {
   // Load saved Apify settings from localStorage
   useEffect(() => {
     const savedToken = localStorage.getItem('sa_apifyToken') || '';
-    const savedActor = localStorage.getItem('sa_apifyActorId') || 'bebity/linkedin-jobs-scraper';
+    const savedActor =
+      localStorage.getItem('sa_apifyActorId') ||
+      'bebity/linkedin-jobs-scraper,epctex/google-jobs-scraper';
     const savedAuto = localStorage.getItem('sa_apifyAutoDaily');
     setApifyToken(savedToken);
-    setSelectedActorId(savedActor);
+    const parsedActors = savedActor
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (parsedActors.length > 0) {
+      setSelectedActorIds(parsedActors);
+    }
     if (savedAuto !== null) {
       setAutoDailySync(savedAuto === 'true');
     }
   }, []);
 
   const handleSaveApifyConfig = () => {
+    const joinedActors = selectedActorIds.join(',');
     localStorage.setItem('sa_apifyToken', apifyToken.trim());
-    localStorage.setItem('sa_apifyActorId', selectedActorId);
+    localStorage.setItem('sa_apifyActorId', joinedActors);
     localStorage.setItem('sa_apifyAutoDaily', String(autoDailySync));
     setSyncBanner({
       type: 'success',
-      text: '✓ Saved Apify API Token & Daily Actor configuration.',
+      text: `✓ Saved Apify API Token & ${selectedActorIds.length} Daily Scraper Actor(s).`,
     });
     setIsApifyDrawerOpen(false);
   };
@@ -274,13 +387,14 @@ export default function JobSearchPage() {
       if (!silentAutoTrigger) {
         setSyncBanner({
           type: 'info',
-          text: 'Running Apify Job Scraper & scoring roles against your Knowledge Vault...',
+          text: 'Running selected Apify Job Scraper Actors & scoring roles against your Knowledge Vault...',
         });
       }
 
       try {
         const token = localStorage.getItem('sa_apifyToken') || apifyToken;
-        const actor = localStorage.getItem('sa_apifyActorId') || selectedActorId;
+        const actor =
+          localStorage.getItem('sa_apifyActorId') || selectedActorIds.join(',');
 
         const res = await fetch('/api/jobs', {
           method: 'POST',
@@ -315,7 +429,7 @@ export default function JobSearchPage() {
         setIsSyncing(false);
       }
     },
-    [apifyToken, selectedActorId]
+    [apifyToken, selectedActorIds]
   );
 
   const loadJobsAndProfiles = useCallback(async () => {
@@ -350,12 +464,24 @@ export default function JobSearchPage() {
       return;
     }
     try {
+      const workplaceType =
+        newProfileForm.workplaceTypes.length === WORKPLACE_OPTIONS.length
+          ? 'Any'
+          : newProfileForm.workplaceTypes.join(', ');
+      const experience = newProfileForm.experiences.join(', ');
+
       const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create-profile',
-          ...newProfileForm,
+          name: newProfileForm.name,
+          keywords: newProfileForm.keywords,
+          location: newProfileForm.location,
+          workplaceType,
+          experience,
+          apifyActorId: selectedActorIds.join(','),
+          scheduleTime: newProfileForm.scheduleTime,
         }),
       });
       const data = await res.json();
@@ -365,9 +491,8 @@ export default function JobSearchPage() {
           name: '',
           keywords: '',
           location: 'Bangalore, India',
-          workplaceType: 'Any',
-          experience: 'Executive / Lead',
-          apifyActorId: selectedActorId,
+          workplaceTypes: ['Remote', 'Hybrid', 'On-site'],
+          experiences: ['Executive / Lead', 'Director'],
           scheduleTime: '08:30',
         });
         setIsAddingProfile(false);
@@ -574,20 +699,17 @@ export default function JobSearchPage() {
             </div>
 
             <div className="md:col-span-4 space-y-1">
-              <label className="block text-xs font-semibold text-indigo-200">Default Apify Job Scraper Actor</label>
-              <select
-                value={selectedActorId}
-                onChange={(e) => setSelectedActorId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white focus:outline-none focus:border-indigo-400"
-              >
-                {APIFY_ACTORS.map((actor) => (
-                  <option key={actor.id} value={actor.id}>
-                    {actor.label}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-xs font-semibold text-indigo-200">
+                Apify Job Scraper Actors (Multi-Select)
+              </label>
+              <MultiSelectDropdown
+                options={APIFY_ACTORS}
+                selected={selectedActorIds}
+                onChange={setSelectedActorIds}
+                placeholder="Select Apify Job Scrapers..."
+              />
               <p className="text-[11px] text-slate-400">
-                Supports any LinkedIn, Indeed, or Google Jobs scraper Actor ID.
+                Select multiple actors (LinkedIn, Indeed, Google Jobs) to aggregate in parallel.
               </p>
             </div>
 
@@ -676,30 +798,27 @@ export default function JobSearchPage() {
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-indigo-200 mb-1">Workplace Mode</label>
-                <select
-                  value={newProfileForm.workplaceType}
-                  onChange={(e) => setNewProfileForm({ ...newProfileForm, workplaceType: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
-                >
-                  <option value="Any">Any (Remote / Hybrid / On-site)</option>
-                  <option value="Remote">Remote Only</option>
-                  <option value="Hybrid">Hybrid</option>
-                  <option value="On-site">On-site</option>
-                </select>
+                <label className="block text-[11px] font-semibold text-indigo-200 mb-1">
+                  Workplace Mode (Multi-Select)
+                </label>
+                <MultiSelectDropdown
+                  options={WORKPLACE_OPTIONS}
+                  selected={newProfileForm.workplaceTypes}
+                  onChange={(next) => setNewProfileForm({ ...newProfileForm, workplaceTypes: next })}
+                  placeholder="Select workplace modes..."
+                />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-indigo-200 mb-1">Seniority Tier</label>
-                <select
-                  value={newProfileForm.experience}
-                  onChange={(e) => setNewProfileForm({ ...newProfileForm, experience: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-xs text-white"
-                >
-                  <option value="Executive / Lead">Executive / VP / Head of Product</option>
-                  <option value="Director">Director / Principal</option>
-                  <option value="Mid-Senior">Senior / Staff PM</option>
-                </select>
+                <label className="block text-[11px] font-semibold text-indigo-200 mb-1">
+                  Seniority Tier (Multi-Select)
+                </label>
+                <MultiSelectDropdown
+                  options={SENIORITY_OPTIONS}
+                  selected={newProfileForm.experiences}
+                  onChange={(next) => setNewProfileForm({ ...newProfileForm, experiences: next })}
+                  placeholder="Select seniority tiers..."
+                />
               </div>
 
               <div className="flex items-end justify-end gap-2">

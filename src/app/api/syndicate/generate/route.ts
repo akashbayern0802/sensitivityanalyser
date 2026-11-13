@@ -23,12 +23,13 @@ A high-authority LinkedIn post has just been written:
 ${postBody}
 ----------------------------
 
-Generate three platform-specific satellite assets to route audience and peer leaders directly to this LinkedIn post.
+Generate four platform-specific satellite assets to route audience and peer leaders directly to this LinkedIn post.
 
-Return ONLY a valid raw JSON object (no markdown, no backticks, no wrapping text) with exactly these three keys:
+Return ONLY a valid raw JSON object (no markdown, no backticks, no wrapping text) with exactly these four keys:
 {
   "xTeaser": "A punchy, high-signal single tweet under 240 characters that hooks the reader with a strong contrarian or architectural insight from the post, followed by: Full breakdown on LinkedIn: ${linkPlaceholder}",
   "whatsappSnippet": "A peer-to-peer message designed to share in a private 5-7 person CXO/VP leadership WhatsApp pod. Format with 2-3 clean emojis. Do NOT sound spammy or ask for likes. Instead, frame it as an intellectual trade-off you just published on LinkedIn and ask for their production experience or perspectives. End with the link: ${linkPlaceholder}",
+  "telegramSnippet": "A high-authority Telegram Channel / Community broadcast post (3-5 crisp lines + key metrics/takeaways with clean emojis) designed for product, fintech, and engineering channels, ending with a direct call to read/discuss on LinkedIn: ${linkPlaceholder}",
   "slackSnippet": "A formatted Markdown message for tech Slack/Discord communities (#reading-room or #tech-strategy). 3-4 bullet points highlighting the architectural or business trade-offs discussed in the post, ending with a discussion question and the link: ${linkPlaceholder}"
 }
 
@@ -53,6 +54,7 @@ Constraints:
       syndication: {
         xTeaser: syndication.xTeaser || '',
         whatsappSnippet: syndication.whatsappSnippet || '',
+        telegramSnippet: syndication.telegramSnippet || '',
         slackSnippet: syndication.slackSnippet || '',
       },
     });

@@ -438,12 +438,22 @@ function ContentStudioContent() {
   const [syndication, setSyndication] = useState<{
     xTeaser: string;
     whatsappSnippet: string;
+    telegramSnippet?: string;
     slackSnippet: string;
   } | null>(null);
   const [isSyndicating, setIsSyndicating] = useState(false);
-  const [activeSyndicateTab, setActiveSyndicateTab] = useState<'whatsapp' | 'twitter' | 'slack'>('whatsapp');
+  const [activeSyndicateTab, setActiveSyndicateTab] = useState<'telegram' | 'whatsapp' | 'twitter' | 'slack'>('telegram');
+  const [telegramPayloadMode, setTelegramPayloadMode] = useState<'direct_post' | 'ai_teaser'>('direct_post');
   const [publishedPostUrl, setPublishedPostUrl] = useState('');
   const [copiedSyndicateType, setCopiedSyndicateType] = useState<string | null>(null);
+
+  // Quick-Connect Telegram Bot inline state
+  const [showQuickTelegramSetup, setShowQuickTelegramSetup] = useState(false);
+  const [quickTgName, setQuickTgName] = useState('');
+  const [quickTgToken, setQuickTgToken] = useState('');
+  const [quickTgChatId, setQuickTgChatId] = useState('');
+  const [isSavingQuickTg, setIsSavingQuickTg] = useState(false);
+  const [quickTgError, setQuickTgError] = useState('');
 
   const handleGenerateSyndication = async () => {
     if (!postBody.trim()) return;
@@ -510,8 +520,73 @@ function ContentStudioContent() {
     loadDistributionChannels();
   }, [loadDistributionChannels]);
 
-  const handleBroadcast = async () => {
-    if (!syndication?.slackSnippet || selectedChannelIds.length === 0) return;
+  const getTelegramBroadcastText = () => {
+    const cleanUrl = publishedPostUrl.trim();
+    if (telegramPayloadMode === 'ai_teaser' && syndication?.telegramSnippet) {
+      return getResolvedAsset(syndication.telegramSnippet);
+    }
+    const basePost = postBody.trim();
+    if (!basePost) return '';
+    if (cleanUrl) {
+      return basePost.includes(cleanUrl)
+        ? basePost
+        : `${basePost}\n\n🔗 Read & engage on LinkedIn: ${cleanUrl}`;
+    }
+    return `${basePost}\n\n🔗 Read & engage on LinkedIn: [LINKEDIN_POST_LINK]`;
+  };
+
+  const handleQuickAddTelegramChannel = async () => {
+    setQuickTgError('');
+    if (!quickTgName.trim() || !quickTgToken.trim() || !quickTgChatId.trim()) {
+      setQuickTgError('Please fill in Channel Name, Bot Token, and Channel @username / Chat ID.');
+      return;
+    }
+    setIsSavingQuickTg(true);
+    try {
+      const testRes = await fetch('/api/broadcast/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'telegram_bot',
+          endpointUrl: quickTgChatId.trim(),
+          authToken: quickTgToken.trim(),
+        }),
+      });
+      const testData = await testRes.json();
+      if (!testData.success) {
+        throw new Error(testData.error || 'Telegram Bot verification failed.');
+      }
+
+      const saveRes = await fetch('/api/broadcast/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: quickTgName.trim(),
+          type: 'telegram_bot',
+          endpointUrl: quickTgChatId.trim(),
+          authToken: quickTgToken.trim(),
+        }),
+      });
+      const saveData = await saveRes.json();
+      if (!saveData.success) {
+        throw new Error(saveData.error || 'Failed to save Telegram channel.');
+      }
+
+      setQuickTgName('');
+      setQuickTgToken('');
+      setQuickTgChatId('');
+      setShowQuickTelegramSetup(false);
+      await loadDistributionChannels();
+    } catch (err: any) {
+      setQuickTgError(err.message || 'Failed to connect Telegram channel.');
+    } finally {
+      setIsSavingQuickTg(false);
+    }
+  };
+
+  const handleBroadcast = async (customText?: string) => {
+    const textToSend = customText ?? syndication?.slackSnippet ?? getTelegramBroadcastText();
+    if (!textToSend?.trim() || selectedChannelIds.length === 0) return;
     setIsDispatching(true);
     setDispatchResult(null);
     try {
@@ -519,7 +594,7 @@ function ContentStudioContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contentText: syndication.slackSnippet,
+          contentText: textToSend,
           postUrl: publishedPostUrl.trim() || undefined,
           channelIds: selectedChannelIds,
         }),
@@ -1991,7 +2066,7 @@ function ContentStudioContent() {
                         </span>
                       </div>
                       <p className="text-[11px] text-gray-300 mt-1">
-                        Turn this LinkedIn post into satellite teasers to route peer leaders from WhatsApp, X &amp; Slack directly to your profile.
+                        Send your direct LinkedIn post + URL to Telegram channels, or generate satellite teasers for WhatsApp, X &amp; Slack.
                       </p>
                     </div>
 
@@ -2008,7 +2083,7 @@ function ContentStudioContent() {
                   {/* LinkedIn Published URL helper */}
                   <div className="bg-white/5 border border-white/10 rounded-xl p-3">
                     <label className="text-[11px] font-medium text-gray-300 block mb-1">
-                      🔗 Published LinkedIn Post Link (optional — replaces [LINKEDIN_POST_LINK] in all assets)
+                      🔗 Published LinkedIn Post URL (appended automatically to direct Telegram posts &amp; replaces [LINKEDIN_POST_LINK])
                     </label>
                     <input
                       type="url"
@@ -2019,11 +2094,24 @@ function ContentStudioContent() {
                     />
                   </div>
 
-                  {syndication ? (
+                  {postBody.trim() || syndication ? (
                     <div className="space-y-3 pt-1">
                       {/* Sub-tabs */}
-                      <div className="flex border-b border-white/10 gap-2">
+                      <div className="flex flex-wrap border-b border-white/10 gap-2">
                         <button
+                          type="button"
+                          onClick={() => setActiveSyndicateTab('telegram')}
+                          className={`pb-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
+                            activeSyndicateTab === 'telegram'
+                              ? 'border-cyan-400 text-cyan-300'
+                              : 'border-transparent text-gray-400 hover:text-gray-200'
+                          }`}
+                        >
+                          <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
+                          ✈️ Telegram Channel (Direct Post + URL)
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => setActiveSyndicateTab('whatsapp')}
                           className={`pb-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
                             activeSyndicateTab === 'whatsapp'
@@ -2035,6 +2123,7 @@ function ContentStudioContent() {
                           WhatsApp CXO Pod (1-Click)
                         </button>
                         <button
+                          type="button"
                           onClick={() => setActiveSyndicateTab('twitter')}
                           className={`pb-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
                             activeSyndicateTab === 'twitter'
@@ -2046,6 +2135,7 @@ function ContentStudioContent() {
                           X / Twitter Teaser
                         </button>
                         <button
+                          type="button"
                           onClick={() => setActiveSyndicateTab('slack')}
                           className={`pb-2 px-3 text-xs font-semibold flex items-center gap-1.5 border-b-2 transition-colors ${
                             activeSyndicateTab === 'slack'
@@ -2058,6 +2148,227 @@ function ContentStudioContent() {
                         </button>
                       </div>
 
+                      {/* Telegram Channel Direct Post + URL Tab */}
+                      {activeSyndicateTab === 'telegram' && (
+                        <div className="space-y-4 bg-white/5 border border-white/10 rounded-xl p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-[11px] font-semibold text-cyan-300">
+                                ✈️ Direct LinkedIn Post + URL to Telegram Channels
+                              </span>
+                              <div className="inline-flex rounded-lg bg-black/40 p-0.5 border border-white/10">
+                                <button
+                                  type="button"
+                                  onClick={() => setTelegramPayloadMode('direct_post')}
+                                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                                    telegramPayloadMode === 'direct_post'
+                                      ? 'bg-cyan-600 text-white shadow-xs'
+                                      : 'text-gray-400 hover:text-white'
+                                  }`}
+                                >
+                                  Direct Full LinkedIn Post + URL
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTelegramPayloadMode('ai_teaser')}
+                                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                                    telegramPayloadMode === 'ai_teaser'
+                                      ? 'bg-cyan-600 text-white shadow-xs'
+                                      : 'text-gray-400 hover:text-white'
+                                  }`}
+                                >
+                                  AI Channel Summary + URL
+                                </button>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => copySyndicateText(getTelegramBroadcastText(), 'telegram')}
+                              className="text-xs text-gray-300 hover:text-white flex items-center gap-1 self-end sm:self-auto"
+                            >
+                              {copiedSyndicateType === 'telegram' ? <Check className="w-3.5 h-3.5 text-cyan-400" /> : <Copy className="w-3.5 h-3.5" />}
+                              {copiedSyndicateType === 'telegram' ? 'Copied' : 'Copy Post + URL'}
+                            </button>
+                          </div>
+
+                          {telegramPayloadMode === 'ai_teaser' && !syndication?.telegramSnippet ? (
+                            <div className="bg-black/40 border border-white/10 rounded-lg p-4 text-center space-y-2">
+                              <p className="text-xs text-gray-300">
+                                Click <strong>&quot;Generate Satellite Assets&quot;</strong> above to create a condensed AI Telegram summary, or use <strong>&quot;Direct Full LinkedIn Post + URL&quot;</strong> to send your complete post immediately.
+                              </p>
+                            </div>
+                          ) : (
+                            <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-sans max-h-60 overflow-y-auto">
+                              {getTelegramBroadcastText()}
+                            </div>
+                          )}
+
+                          {/* Option 1: Instant 1-Click Share to Telegram App / Web */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            <a
+                              href={`https://t.me/share/url?url=${encodeURIComponent(
+                                publishedPostUrl.trim() || 'https://www.linkedin.com/feed/'
+                              )}&text=${encodeURIComponent(
+                                telegramPayloadMode === 'ai_teaser' && syndication?.telegramSnippet
+                                  ? getResolvedAsset(syndication.telegramSnippet)
+                                  : postBody.trim()
+                              )}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                            >
+                              <Send className="w-3.5 h-3.5" />
+                              Share to Telegram Channel via App/Web (1-Click)
+                            </a>
+
+                            <button
+                              type="button"
+                              onClick={() => setShowQuickTelegramSetup(!showQuickTelegramSetup)}
+                              className="py-2.5 px-4 bg-white/10 hover:bg-white/15 border border-white/15 text-cyan-200 font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors"
+                            >
+                              <span>🤖</span>
+                              {showQuickTelegramSetup ? 'Hide Bot Setup' : '+ Connect Telegram Channel Bot'}
+                            </button>
+                          </div>
+
+                          {/* Inline Quick-Connect Telegram Bot Form */}
+                          {showQuickTelegramSetup && (
+                            <div className="p-3.5 bg-slate-900/90 border border-cyan-500/30 rounded-xl space-y-3">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-cyan-300">
+                                  Connect a Telegram Channel for Direct 1-Click Bot Broadcasts
+                                </span>
+                                <span className="text-[10px] text-gray-400">Powered by Telegram Bot API</span>
+                              </div>
+                              <p className="text-[11px] text-gray-300 leading-relaxed">
+                                1. Create a bot via <span className="font-mono text-cyan-300">@BotFather</span> and add it as an <strong>Admin</strong> to your Telegram Channel.<br />
+                                2. Enter your Bot Token and Channel <span className="font-mono text-cyan-300">@username</span> (or <span className="font-mono text-cyan-300">-100...</span> Chat ID) below:
+                              </p>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <input
+                                  type="text"
+                                  value={quickTgName}
+                                  onChange={(e) => setQuickTgName(e.target.value)}
+                                  placeholder="Label (e.g. FinTech Channel)"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-cyan-400"
+                                />
+                                <input
+                                  type="password"
+                                  value={quickTgToken}
+                                  onChange={(e) => setQuickTgToken(e.target.value)}
+                                  placeholder="Bot Token (123456:ABC-DEF...)"
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-cyan-400 font-mono"
+                                />
+                                <input
+                                  type="text"
+                                  value={quickTgChatId}
+                                  onChange={(e) => setQuickTgChatId(e.target.value)}
+                                  placeholder="@channel_username or -100..."
+                                  className="bg-black/50 border border-white/15 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-gray-500 outline-none focus:border-cyan-400 font-mono"
+                                />
+                              </div>
+                              {quickTgError && (
+                                <p className="text-xs text-red-300 bg-red-950/50 border border-red-500/30 rounded-lg px-2.5 py-1.5">
+                                  {quickTgError}
+                                </p>
+                              )}
+                              <div className="flex justify-end gap-2">
+                                <button
+                                  type="button"
+                                  onClick={handleQuickAddTelegramChannel}
+                                  disabled={isSavingQuickTg}
+                                  className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5"
+                                >
+                                  {isSavingQuickTg ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                                  {isSavingQuickTg ? 'Verifying & Connecting...' : 'Verify Ping & Save Channel'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Automated Bot Broadcast to Connected Channels */}
+                          {configuredChannels.length > 0 && (
+                            <div className="pt-3 border-t border-white/10 space-y-2.5">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-semibold text-white flex items-center gap-1.5">
+                                  <Send className="w-3.5 h-3.5 text-cyan-400" />
+                                  Automated 1-Click Channel Broadcast (Telegram / Slack / Discord)
+                                </span>
+                                <Link
+                                  href="/dashboard/settings"
+                                  className="text-[11px] text-cyan-300 hover:text-white transition-colors"
+                                >
+                                  Manage Channels →
+                                </Link>
+                              </div>
+
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {configuredChannels.map((ch) => {
+                                  const isChecked = selectedChannelIds.includes(ch.id);
+                                  return (
+                                    <button
+                                      key={ch.id}
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedChannelIds((prev) =>
+                                          prev.includes(ch.id)
+                                            ? prev.filter((id) => id !== ch.id)
+                                            : [...prev, ch.id]
+                                        );
+                                      }}
+                                      className={`flex items-center gap-2 p-2 rounded-lg border text-xs text-left transition-colors ${
+                                        isChecked
+                                          ? 'bg-cyan-900/40 border-cyan-500/60 text-white'
+                                          : 'bg-black/30 border-white/10 text-gray-400 hover:text-gray-200'
+                                      }`}
+                                    >
+                                      <span
+                                        className={`w-4 h-4 rounded flex items-center justify-center border shrink-0 ${
+                                          isChecked
+                                            ? 'bg-cyan-500 border-cyan-400 text-white'
+                                            : 'border-gray-500 bg-transparent'
+                                        }`}
+                                      >
+                                        {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
+                                      </span>
+                                      <span className="truncate flex-1">{ch.name}</span>
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/10 text-gray-300">
+                                        {ch.type === 'telegram_bot' ? 'Telegram' : ch.type === 'slack_webhook' ? 'Slack' : 'Discord'}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleBroadcast(getTelegramBroadcastText())}
+                                disabled={isDispatching || selectedChannelIds.length === 0}
+                                className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
+                              >
+                                {isDispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                {isDispatching
+                                  ? 'Broadcasting Direct Post + URL...'
+                                  : `Broadcast Post + URL to ${selectedChannelIds.length} Connected Channel${selectedChannelIds.length === 1 ? '' : 's'}`}
+                              </button>
+
+                              {dispatchResult && (
+                                <div
+                                  className={`p-2.5 rounded-lg text-xs ${
+                                    dispatchResult.success
+                                      ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-600/40'
+                                      : 'bg-red-950/60 text-red-300 border border-red-600/40'
+                                  }`}
+                                >
+                                  {dispatchResult.message}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* WhatsApp Pod Tab */}
                       {activeSyndicateTab === 'whatsapp' && (
                         <div className="space-y-3 bg-white/5 border border-white/10 rounded-xl p-4">
@@ -2066,7 +2377,8 @@ function ContentStudioContent() {
                               💬 Formatted for peer debate in your 5-7 person leadership pod
                             </span>
                             <button
-                              onClick={() => copySyndicateText(syndication.whatsappSnippet, 'whatsapp')}
+                              type="button"
+                              onClick={() => copySyndicateText(syndication?.whatsappSnippet || getTelegramBroadcastText(), 'whatsapp')}
                               className="text-xs text-gray-300 hover:text-white flex items-center gap-1"
                             >
                               {copiedSyndicateType === 'whatsapp' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -2075,11 +2387,11 @@ function ContentStudioContent() {
                           </div>
 
                           <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-sans">
-                            {getResolvedAsset(syndication.whatsappSnippet)}
+                            {getResolvedAsset(syndication?.whatsappSnippet || getTelegramBroadcastText())}
                           </div>
 
                           <a
-                            href={`https://api.whatsapp.com/send?text=${encodeURIComponent(getResolvedAsset(syndication.whatsappSnippet))}`}
+                            href={`https://api.whatsapp.com/send?text=${encodeURIComponent(getResolvedAsset(syndication?.whatsappSnippet || getTelegramBroadcastText()))}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
@@ -2095,10 +2407,11 @@ function ContentStudioContent() {
                         <div className="space-y-3 bg-white/5 border border-white/10 rounded-xl p-4">
                           <div className="flex items-center justify-between">
                             <span className="text-[11px] font-medium text-sky-300">
-                              🐦 High-signal teaser hook ({getResolvedAsset(syndication.xTeaser).length} / 280 chars)
+                              🐦 High-signal teaser hook ({getResolvedAsset(syndication?.xTeaser || getTelegramBroadcastText().slice(0, 260)).length} / 280 chars)
                             </span>
                             <button
-                              onClick={() => copySyndicateText(syndication.xTeaser, 'twitter')}
+                              type="button"
+                              onClick={() => copySyndicateText(syndication?.xTeaser || getTelegramBroadcastText().slice(0, 260), 'twitter')}
                               className="text-xs text-gray-300 hover:text-white flex items-center gap-1"
                             >
                               {copiedSyndicateType === 'twitter' ? <Check className="w-3.5 h-3.5 text-sky-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -2107,11 +2420,11 @@ function ContentStudioContent() {
                           </div>
 
                           <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-sans">
-                            {getResolvedAsset(syndication.xTeaser)}
+                            {getResolvedAsset(syndication?.xTeaser || getTelegramBroadcastText().slice(0, 260))}
                           </div>
 
                           <a
-                            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(getResolvedAsset(syndication.xTeaser))}`}
+                            href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(getResolvedAsset(syndication?.xTeaser || getTelegramBroadcastText().slice(0, 260)))}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="w-full py-2.5 px-4 bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
@@ -2130,7 +2443,8 @@ function ContentStudioContent() {
                               💬 Markdown discussion starter for #reading or #strategy channels
                             </span>
                             <button
-                              onClick={() => copySyndicateText(syndication.slackSnippet, 'slack')}
+                              type="button"
+                              onClick={() => copySyndicateText(syndication?.slackSnippet || getTelegramBroadcastText(), 'slack')}
                               className="text-xs text-gray-300 hover:text-white flex items-center gap-1"
                             >
                               {copiedSyndicateType === 'slack' ? <Check className="w-3.5 h-3.5 text-purple-400" /> : <Copy className="w-3.5 h-3.5" />}
@@ -2139,7 +2453,7 @@ function ContentStudioContent() {
                           </div>
 
                           <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-mono">
-                            {getResolvedAsset(syndication.slackSnippet)}
+                            {getResolvedAsset(syndication?.slackSnippet || getTelegramBroadcastText())}
                           </div>
 
                           {/* Automated Webhook Broadcast Section */}
@@ -2147,7 +2461,7 @@ function ContentStudioContent() {
                             <div className="flex items-center justify-between">
                               <span className="text-xs font-semibold text-white flex items-center gap-1.5">
                                 <Send className="w-3.5 h-3.5 text-purple-400" />
-                                Automated Webhook Broadcast (Slack / Discord)
+                                Automated Webhook Broadcast (Telegram / Slack / Discord)
                               </span>
                               <Link
                                 href="/dashboard/settings"
@@ -2164,7 +2478,7 @@ function ContentStudioContent() {
                                   href="/dashboard/settings"
                                   className="text-xs text-purple-400 hover:text-purple-300 font-semibold"
                                 >
-                                  + Configure Slack/Discord Webhooks in Settings
+                                  + Configure Telegram/Slack/Discord Channels in Settings
                                 </Link>
                               </div>
                             ) : (
@@ -2198,7 +2512,8 @@ function ContentStudioContent() {
                                 </div>
 
                                 <button
-                                  onClick={handleBroadcast}
+                                  type="button"
+                                  onClick={() => handleBroadcast()}
                                   disabled={isDispatching || selectedChannelIds.length === 0}
                                   className="w-full mt-2 py-2.5 px-4 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
                                 >

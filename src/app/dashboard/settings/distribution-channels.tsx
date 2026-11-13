@@ -9,8 +9,6 @@ import {
   Loader2, 
   Send, 
   AlertCircle, 
-  ExternalLink,
-  MessageSquare,
   Hash,
   ShieldCheck
 } from 'lucide-react';
@@ -20,6 +18,7 @@ interface Channel {
   name: string;
   type: string;
   endpointUrl: string;
+  authToken?: string | null;
   isActive: boolean;
   createdAt: string;
   broadcastLogs?: Array<{ status: string; dispatchedAt: string }>;
@@ -34,8 +33,9 @@ export function DistributionChannelsManager() {
 
   // New channel form state
   const [newName, setNewName] = useState('');
-  const [newType, setNewType] = useState<'slack_webhook' | 'discord_webhook'>('slack_webhook');
+  const [newType, setNewType] = useState<'telegram_bot' | 'slack_webhook' | 'discord_webhook'>('telegram_bot');
   const [newUrl, setNewUrl] = useState('');
+  const [newAuthToken, setNewAuthToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
@@ -58,20 +58,20 @@ export function DistributionChannelsManager() {
     loadChannels();
   }, [loadChannels]);
 
-  const handleTestWebhook = async (id: string, type: string, endpointUrl: string) => {
+  const handleTestWebhook = async (id: string, type: string, endpointUrl: string, authToken?: string | null) => {
     setTestingId(id);
     setTestResult(null);
     try {
       const res = await fetch('/api/broadcast/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type, endpointUrl }),
+        body: JSON.stringify({ type, endpointUrl, authToken }),
       });
       const data = await res.json();
       if (data.success) {
-        setTestResult({ id, success: true, message: 'Ping verified! Webhook is receiving messages.' });
+        setTestResult({ id, success: true, message: 'Ping verified! Channel is receiving messages.' });
       } else {
-        setTestResult({ id, success: false, message: data.error || 'Webhook test failed.' });
+        setTestResult({ id, success: false, message: data.error || 'Channel test failed.' });
       }
     } catch (err: any) {
       setTestResult({ id, success: false, message: err.message || 'Connection error' });
@@ -97,7 +97,7 @@ export function DistributionChannelsManager() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to remove this webhook channel?')) return;
+    if (!confirm('Are you sure you want to remove this distribution channel?')) return;
     try {
       const res = await fetch('/api/broadcast/channels', {
         method: 'DELETE',
@@ -119,21 +119,30 @@ export function DistributionChannelsManager() {
     setFormSuccess('');
 
     if (!newName.trim() || !newUrl.trim()) {
-      setFormError('Please enter both a channel name and webhook URL.');
+      setFormError('Please enter both a channel label and target URL / Chat ID.');
+      return;
+    }
+
+    if (newType === 'telegram_bot' && !newAuthToken.trim()) {
+      setFormError('Please enter your Telegram Bot Token (from @BotFather).');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // 1. Test ping first to confirm URL is valid
+      // 1. Test ping first to confirm URL / Bot Token is valid
       const testRes = await fetch('/api/broadcast/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: newType, endpointUrl: newUrl.trim() }),
+        body: JSON.stringify({
+          type: newType,
+          endpointUrl: newUrl.trim(),
+          authToken: newType === 'telegram_bot' ? newAuthToken.trim() : undefined,
+        }),
       });
       const testData = await testRes.json();
       if (!testData.success) {
-        throw new Error(testData.error || 'Webhook test failed. Please verify the URL.');
+        throw new Error(testData.error || 'Channel verification failed. Please verify the credentials.');
       }
 
       // 2. Save channel to DB
@@ -144,6 +153,7 @@ export function DistributionChannelsManager() {
           name: newName.trim(),
           type: newType,
           endpointUrl: newUrl.trim(),
+          authToken: newType === 'telegram_bot' ? newAuthToken.trim() : null,
         }),
       });
 
@@ -155,6 +165,7 @@ export function DistributionChannelsManager() {
       setFormSuccess('Channel verified and added successfully!');
       setNewName('');
       setNewUrl('');
+      setNewAuthToken('');
       setIsAdding(false);
       loadChannels();
     } catch (err: any) {
@@ -174,11 +185,11 @@ export function DistributionChannelsManager() {
                 <Radio className="w-5 h-5" />
               </span>
               <h3 className="text-base font-semibold leading-7 text-gray-900">
-                Distribution Channels &amp; Community Webhooks
+                Distribution Channels (Telegram, Slack &amp; Discord)
               </h3>
             </div>
             <p className="mt-1 text-sm text-gray-500">
-              Configure Slack &amp; Discord incoming webhooks for instant 1-click syndication from the Content Studio.
+              Configure Telegram Channels (Bot API), Slack, or Discord webhooks to broadcast your direct LinkedIn posts + URLs in 1 click from Content Studio.
             </p>
           </div>
 
@@ -187,14 +198,14 @@ export function DistributionChannelsManager() {
             className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition-colors shrink-0"
           >
             <Plus className="w-4 h-4" />
-            {isAdding ? 'Cancel' : 'Add Webhook'}
+            {isAdding ? 'Cancel' : 'Add Channel / Bot'}
           </button>
         </div>
 
         {/* Add Channel Drawer */}
         {isAdding && (
           <form onSubmit={handleCreateChannel} className="mt-5 p-5 bg-gray-50 border border-gray-200 rounded-xl space-y-4">
-            <h4 className="text-sm font-semibold text-gray-900">New Webhook Integration</h4>
+            <h4 className="text-sm font-semibold text-gray-900">New Syndication Channel Integration</h4>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="sm:col-span-2">
@@ -203,8 +214,8 @@ export function DistributionChannelsManager() {
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="e.g. The Product Folks Slack (#reading) or Dev Founders Discord"
-                  className="w-full text-sm px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                  placeholder="e.g. FinTech & Payments Telegram Channel or Product Folks Slack"
+                  className="w-full text-sm px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                   required
                 />
               </div>
@@ -216,31 +227,68 @@ export function DistributionChannelsManager() {
                   onChange={(e) => setNewType(e.target.value as any)}
                   className="w-full text-sm px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none bg-white"
                 >
+                  <option value="telegram_bot">✈️ Telegram Channel / Group (Bot API)</option>
                   <option value="slack_webhook">Slack Incoming Webhook</option>
                   <option value="discord_webhook">Discord Webhook</option>
                 </select>
               </div>
 
-              <div className="sm:col-span-3">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Incoming Webhook URL</label>
-                <input
-                  type="url"
-                  value={newUrl}
-                  onChange={(e) => setNewUrl(e.target.value)}
-                  placeholder={
-                    newType === 'slack_webhook'
-                      ? 'https://hooks.slack.com/services/T000/B000/XXXXXX'
-                      : 'https://discord.com/api/webhooks/123456/abcdef...'
-                  }
-                  className="w-full text-sm px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-xs"
-                  required
-                />
-                <p className="mt-1 text-[11px] text-gray-500">
-                  {newType === 'slack_webhook' 
-                    ? 'Create in Slack: Apps → Incoming Webhooks → Add New Webhook to Workspace.' 
-                    : 'Create in Discord: Channel Settings → Integrations → Webhooks → New Webhook.'}
-                </p>
-              </div>
+              {newType === 'telegram_bot' ? (
+                <>
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Telegram Bot Token (from <span className="font-mono">@BotFather</span>)
+                    </label>
+                    <input
+                      type="password"
+                      value={newAuthToken}
+                      onChange={(e) => setNewAuthToken(e.target.value)}
+                      placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz..."
+                      className="w-full text-sm px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-xs bg-white"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Telegram Channel / Chat ID
+                    </label>
+                    <input
+                      type="text"
+                      value={newUrl}
+                      onChange={(e) => setNewUrl(e.target.value)}
+                      placeholder="@my_channel or -1001234567890"
+                      className="w-full text-sm px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-xs bg-white"
+                      required
+                    />
+                  </div>
+                  <div className="sm:col-span-3">
+                    <p className="text-[11px] text-gray-500">
+                      💡 <strong>How to set up:</strong> Message <span className="font-mono">@BotFather</span> on Telegram → <span className="font-mono">/newbot</span> → copy the Bot Token → add your bot as an <strong>Admin</strong> (with &quot;Post Messages&quot; permission) to your Telegram Channel → enter <span className="font-mono">@your_channel_username</span> (or numeric Chat ID <span className="font-mono">-100...</span> for private channels).
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Incoming Webhook URL</label>
+                  <input
+                    type="url"
+                    value={newUrl}
+                    onChange={(e) => setNewUrl(e.target.value)}
+                    placeholder={
+                      newType === 'slack_webhook'
+                        ? 'https://hooks.slack.com/services/T000/B000/XXXXXX'
+                        : 'https://discord.com/api/webhooks/123456/abcdef...'
+                    }
+                    className="w-full text-sm px-3.5 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none font-mono text-xs bg-white"
+                    required
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    {newType === 'slack_webhook' 
+                      ? 'Create in Slack: Apps → Incoming Webhooks → Add New Webhook to Workspace.' 
+                      : 'Create in Discord: Channel Settings → Integrations → Webhooks → New Webhook.'}
+                  </p>
+                </div>
+              )}
             </div>
 
             {formError && (
@@ -287,9 +335,9 @@ export function DistributionChannelsManager() {
           ) : channels.length === 0 ? (
             <div className="py-8 text-center border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
               <Hash className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-              <p className="text-sm font-medium text-gray-600">No community webhooks configured</p>
+              <p className="text-sm font-medium text-gray-600">No distribution channels configured</p>
               <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-                Add your Slack or Discord community channel webhooks above to enable zero-friction broadcasts from the Content Studio.
+                Add your Telegram Channel Bot, Slack, or Discord webhooks above to enable 1-click LinkedIn post + URL broadcasts from Content Studio.
               </p>
             </div>
           ) : (
@@ -302,11 +350,13 @@ export function DistributionChannelsManager() {
               >
                 <div className="flex items-start gap-3 min-w-0">
                   <span className={`p-2 rounded-lg text-xs font-bold shrink-0 mt-0.5 ${
-                    ch.type === 'slack_webhook' 
+                    ch.type === 'telegram_bot'
+                      ? 'bg-sky-50 text-sky-700 border border-sky-200'
+                      : ch.type === 'slack_webhook' 
                       ? 'bg-amber-50 text-amber-700 border border-amber-200' 
                       : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                   }`}>
-                    {ch.type === 'slack_webhook' ? 'Slack' : 'Discord'}
+                    {ch.type === 'telegram_bot' ? '✈️ Telegram' : ch.type === 'slack_webhook' ? 'Slack' : 'Discord'}
                   </span>
 
                   <div className="min-w-0">
@@ -320,7 +370,9 @@ export function DistributionChannelsManager() {
                     </div>
 
                     <p className="text-xs text-gray-400 font-mono truncate mt-0.5 max-w-md">
-                      {ch.endpointUrl.replace(/(hooks\.slack\.com\/services\/[^\/]+\/[^\/]+\/).+/, '$1••••••••')}
+                      {ch.type === 'telegram_bot'
+                        ? `Channel / Chat ID: ${ch.endpointUrl}`
+                        : ch.endpointUrl.replace(/(hooks\.slack\.com\/services\/[^\/]+\/[^\/]+\/).+/, '$1••••••••')}
                     </p>
 
                     {ch.broadcastLogs && ch.broadcastLogs.length > 0 && (
@@ -333,7 +385,7 @@ export function DistributionChannelsManager() {
 
                 <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                   <button
-                    onClick={() => handleTestWebhook(ch.id, ch.type, ch.endpointUrl)}
+                    onClick={() => handleTestWebhook(ch.id, ch.type, ch.endpointUrl, ch.authToken)}
                     disabled={testingId === ch.id}
                     className="px-2.5 py-1.5 text-xs text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-gray-200"
                     title="Send test ping"
@@ -376,4 +428,3 @@ export function DistributionChannelsManager() {
     </section>
   );
 }
-

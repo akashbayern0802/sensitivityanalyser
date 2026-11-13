@@ -28,31 +28,55 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    const resolvedText = postUrl?.trim()
-      ? contentText.replace(/\[LINKEDIN_POST_LINK\]/g, postUrl.trim())
+    const cleanPostUrl = postUrl?.trim() || '';
+    let resolvedText = cleanPostUrl
+      ? contentText.replace(/\[LINKEDIN_POST_LINK\]/g, cleanPostUrl)
       : contentText;
+
+    if (cleanPostUrl && !resolvedText.includes(cleanPostUrl)) {
+      resolvedText = `${resolvedText.trim()}\n\n🔗 Read & engage on LinkedIn: ${cleanPostUrl}`;
+    }
 
     const results = await Promise.allSettled(
       channels.map(async (channel) => {
         if (!channel.endpointUrl) {
-          throw new Error('Missing endpoint URL');
+          throw new Error('Missing endpoint URL / Chat ID');
         }
 
-        let bodyPayload: Record<string, string>;
+        let response: Response;
 
-        if (channel.type === 'slack_webhook') {
-          bodyPayload = { text: resolvedText };
-        } else if (channel.type === 'discord_webhook') {
-          bodyPayload = { content: resolvedText };
+        if (channel.type === 'telegram_bot') {
+          if (!channel.authToken?.trim()) {
+            throw new Error('Missing Telegram Bot Token');
+          }
+          const tgUrl = `https://api.telegram.org/bot${channel.authToken.trim()}/sendMessage`;
+          const tgText = resolvedText.length > 4090 ? resolvedText.slice(0, 4087) + '...' : resolvedText;
+          response = await fetch(tgUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chat_id: channel.endpointUrl.trim(),
+              text: tgText,
+              disable_web_page_preview: false,
+            }),
+          });
         } else {
-          bodyPayload = { text: resolvedText };
-        }
+          let bodyPayload: Record<string, string>;
 
-        const response = await fetch(channel.endpointUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyPayload),
-        });
+          if (channel.type === 'slack_webhook') {
+            bodyPayload = { text: resolvedText };
+          } else if (channel.type === 'discord_webhook') {
+            bodyPayload = { content: resolvedText };
+          } else {
+            bodyPayload = { text: resolvedText };
+          }
+
+          response = await fetch(channel.endpointUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyPayload),
+          });
+        }
 
         const statusText = response.ok ? 'success' : 'failed';
         const responseLog = response.ok ? 'OK' : `HTTP ${response.status}: ${await response.text().catch(() => '')}`;

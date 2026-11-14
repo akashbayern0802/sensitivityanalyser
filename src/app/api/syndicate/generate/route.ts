@@ -4,43 +4,63 @@ import { resolveLanguageModel } from '@/lib/ai/provider-factory';
 
 export const dynamic = 'force-dynamic';
 
+async function fetchLinkedInUrlContext(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
+      },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!res.ok) return '';
+    const html = await res.text();
+    const ogTitle =
+      html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)?.[1] || '';
+    const ogDesc =
+      html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
+      html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
+      '';
+    return [ogTitle, ogDesc].filter(Boolean).join('\n').trim();
+  } catch {
+    return '';
+  }
+}
+
 export async function POST(req: Request) {
   try {
-    const { modelConfig, postBody, postUrl, targetRole } = await req.json();
+    const { modelConfig, postUrl, targetRole } = await req.json();
 
-    if (!postBody || !postBody.trim()) {
-      return NextResponse.json({ success: false, error: 'postBody is required' }, { status: 400 });
+    const cleanUrl = postUrl?.trim();
+    if (!cleanUrl) {
+      return NextResponse.json({ success: false, error: 'Please paste a LinkedIn Post URL first.' }, { status: 400 });
     }
 
     const model = resolveLanguageModel(modelConfig);
-    const linkPlaceholder = postUrl?.trim() || '[LINKEDIN_POST_LINK]';
     const role = targetRole || 'Senior Tech & Product Leader';
+    const urlContext = await fetchLinkedInUrlContext(cleanUrl);
 
     const prompt = `You are an executive syndication strategist for a ${role}.
-A high-authority LinkedIn post has just been written:
+A LinkedIn post has just been published at this URL:
+${cleanUrl}
+${urlContext ? `\nExtracted Link Preview Metadata:\n${urlContext}\n` : ''}
 
---- MASTER LINKEDIN POST ---
-${postBody}
-----------------------------
-
-Generate four platform-specific satellite assets to route audience and peer leaders directly to this LinkedIn post.
+Generate short, high-signal link-drop teasers around this LinkedIn URL (do NOT include or repeat a full post — keep it strictly centered on sharing the URL so the target platform renders the native LinkedIn link preview card).
 
 Return ONLY a valid raw JSON object (no markdown, no backticks, no wrapping text) with exactly these four keys:
 {
-  "xTeaser": "A punchy, high-signal single tweet under 240 characters that hooks the reader with a strong contrarian or architectural insight from the post, followed by: Full breakdown on LinkedIn: ${linkPlaceholder}",
-  "whatsappSnippet": "A peer-to-peer message designed to share in a private 5-7 person CXO/VP leadership WhatsApp pod. Format with 2-3 clean emojis. Do NOT sound spammy or ask for likes. Instead, frame it as an intellectual trade-off you just published on LinkedIn and ask for their production experience or perspectives. End with the link: ${linkPlaceholder}",
-  "telegramSnippet": "A high-authority Telegram Channel / Community broadcast post (3-5 crisp lines + key metrics/takeaways with clean emojis) designed for product, fintech, and engineering channels, ending with a direct call to read/discuss on LinkedIn: ${linkPlaceholder}",
-  "slackSnippet": "A formatted Markdown message for tech Slack/Discord communities (#reading-room or #tech-strategy). 3-4 bullet points highlighting the architectural or business trade-offs discussed in the post, ending with a discussion question and the link: ${linkPlaceholder}"
+  "telegramSnippet": "${cleanUrl}",
+  "xTeaser": "A crisp 1-sentence executive hook (under 180 chars) followed by: ${cleanUrl}",
+  "whatsappSnippet": "A 1-2 line peer message for a private CXO/VP WhatsApp group dropping the link for feedback: ${cleanUrl}",
+  "slackSnippet": "A short 1-2 line community link-drop for Slack/Discord (#reading-room): ${cleanUrl}"
 }
 
 Constraints:
-- Maintain an executive gravitas (focus on P&L, architecture trade-offs, and operational scale, not beginner tips).
-- "xTeaser" MUST be under 260 characters total including the link.
+- Do NOT output a full post body.
+- "telegramSnippet" should be strictly the URL (${cleanUrl}) or at most a 1-line pointer + ${cleanUrl}.
 - Return ONLY the JSON object.`;
 
     const { text } = await generateText({ model, prompt });
-    
-    // Parse JSON safely
+
     const cleaned = text.trim().replace(/^```json\s*/gi, '').replace(/```\s*$/gi, '').trim();
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (!match) {
@@ -52,10 +72,10 @@ Constraints:
     return NextResponse.json({
       success: true,
       syndication: {
-        xTeaser: syndication.xTeaser || '',
-        whatsappSnippet: syndication.whatsappSnippet || '',
-        telegramSnippet: syndication.telegramSnippet || '',
-        slackSnippet: syndication.slackSnippet || '',
+        telegramSnippet: cleanUrl,
+        xTeaser: syndication.xTeaser || cleanUrl,
+        whatsappSnippet: syndication.whatsappSnippet || cleanUrl,
+        slackSnippet: syndication.slackSnippet || cleanUrl,
       },
     });
   } catch (error: any) {

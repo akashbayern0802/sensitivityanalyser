@@ -443,7 +443,6 @@ function ContentStudioContent() {
   } | null>(null);
   const [isSyndicating, setIsSyndicating] = useState(false);
   const [activeSyndicateTab, setActiveSyndicateTab] = useState<'telegram' | 'whatsapp' | 'twitter' | 'slack'>('telegram');
-  const [telegramPayloadMode, setTelegramPayloadMode] = useState<'direct_post' | 'ai_teaser'>('direct_post');
   const [publishedPostUrl, setPublishedPostUrl] = useState('');
   const [copiedSyndicateType, setCopiedSyndicateType] = useState<string | null>(null);
 
@@ -456,7 +455,10 @@ function ContentStudioContent() {
   const [quickTgError, setQuickTgError] = useState('');
 
   const handleGenerateSyndication = async () => {
-    if (!postBody.trim()) return;
+    if (!publishedPostUrl.trim()) {
+      alert('Please paste your LinkedIn Post URL first.');
+      return;
+    }
     setIsSyndicating(true);
     try {
       const config = getLLMConfig();
@@ -464,8 +466,7 @@ function ContentStudioContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          postBody,
-          postUrl: publishedPostUrl.trim() || undefined,
+          postUrl: publishedPostUrl.trim(),
           targetRole: localStorage.getItem('sa_targetRole') || 'Senior Tech & Product Leader',
           modelConfig: config,
         }),
@@ -521,18 +522,7 @@ function ContentStudioContent() {
   }, [loadDistributionChannels]);
 
   const getTelegramBroadcastText = () => {
-    const cleanUrl = publishedPostUrl.trim();
-    if (telegramPayloadMode === 'ai_teaser' && syndication?.telegramSnippet) {
-      return getResolvedAsset(syndication.telegramSnippet);
-    }
-    const basePost = postBody.trim();
-    if (!basePost) return '';
-    if (cleanUrl) {
-      return basePost.includes(cleanUrl)
-        ? basePost
-        : `${basePost}\n\n🔗 Read & engage on LinkedIn: ${cleanUrl}`;
-    }
-    return `${basePost}\n\n🔗 Read & engage on LinkedIn: [LINKEDIN_POST_LINK]`;
+    return publishedPostUrl.trim();
   };
 
   const handleQuickAddTelegramChannel = async () => {
@@ -2066,24 +2056,24 @@ function ContentStudioContent() {
                         </span>
                       </div>
                       <p className="text-[11px] text-gray-300 mt-1">
-                        Send your direct LinkedIn post + URL to Telegram channels, or generate satellite teasers for WhatsApp, X &amp; Slack.
+                        Paste your published LinkedIn post URL below to share or broadcast the link directly to Telegram channels, WhatsApp, X &amp; Slack.
                       </p>
                     </div>
 
                     <button
                       onClick={handleGenerateSyndication}
-                      disabled={isSyndicating || !postBody.trim()}
+                      disabled={isSyndicating || !publishedPostUrl.trim()}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shrink-0"
                     >
                       {isSyndicating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                      {syndication ? 'Regenerate Satellite Assets' : 'Generate Satellite Assets'}
+                      {syndication ? 'Regenerate Link Teasers' : 'Generate Link Teasers'}
                     </button>
                   </div>
 
                   {/* LinkedIn Published URL helper */}
                   <div className="bg-white/5 border border-white/10 rounded-xl p-3">
                     <label className="text-[11px] font-medium text-gray-300 block mb-1">
-                      🔗 Published LinkedIn Post URL (appended automatically to direct Telegram posts &amp; replaces [LINKEDIN_POST_LINK])
+                      🔗 Paste LinkedIn Post URL (Required — only this URL is sent to Telegram &amp; syndication channels)
                     </label>
                     <input
                       type="url"
@@ -2094,7 +2084,7 @@ function ContentStudioContent() {
                     />
                   </div>
 
-                  {postBody.trim() || syndication ? (
+                  {publishedPostUrl.trim() || syndication ? (
                     <div className="space-y-3 pt-1">
                       {/* Sub-tabs */}
                       <div className="flex flex-wrap border-b border-white/10 gap-2">
@@ -2108,7 +2098,7 @@ function ContentStudioContent() {
                           }`}
                         >
                           <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                          ✈️ Telegram Channel (Direct Post + URL)
+                          ✈️ Telegram Channel (Direct URL)
                         </button>
                         <button
                           type="button"
@@ -2148,78 +2138,38 @@ function ContentStudioContent() {
                         </button>
                       </div>
 
-                      {/* Telegram Channel Direct Post + URL Tab */}
+                      {/* Telegram Channel Direct URL Tab */}
                       {activeSyndicateTab === 'telegram' && (
                         <div className="space-y-4 bg-white/5 border border-white/10 rounded-xl p-4">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-[11px] font-semibold text-cyan-300">
-                                ✈️ Direct LinkedIn Post + URL to Telegram Channels
-                              </span>
-                              <div className="inline-flex rounded-lg bg-black/40 p-0.5 border border-white/10">
-                                <button
-                                  type="button"
-                                  onClick={() => setTelegramPayloadMode('direct_post')}
-                                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                                    telegramPayloadMode === 'direct_post'
-                                      ? 'bg-cyan-600 text-white shadow-xs'
-                                      : 'text-gray-400 hover:text-white'
-                                  }`}
-                                >
-                                  Direct Full LinkedIn Post + URL
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setTelegramPayloadMode('ai_teaser')}
-                                  className={`px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
-                                    telegramPayloadMode === 'ai_teaser'
-                                      ? 'bg-cyan-600 text-white shadow-xs'
-                                      : 'text-gray-400 hover:text-white'
-                                  }`}
-                                >
-                                  AI Channel Summary + URL
-                                </button>
-                              </div>
-                            </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold text-cyan-300">
+                              ✈️ Direct LinkedIn URL for Telegram Channel (renders native LinkedIn link preview card)
+                            </span>
 
                             <button
                               type="button"
                               onClick={() => copySyndicateText(getTelegramBroadcastText(), 'telegram')}
-                              className="text-xs text-gray-300 hover:text-white flex items-center gap-1 self-end sm:self-auto"
+                              className="text-xs text-gray-300 hover:text-white flex items-center gap-1 shrink-0"
                             >
                               {copiedSyndicateType === 'telegram' ? <Check className="w-3.5 h-3.5 text-cyan-400" /> : <Copy className="w-3.5 h-3.5" />}
-                              {copiedSyndicateType === 'telegram' ? 'Copied' : 'Copy Post + URL'}
+                              {copiedSyndicateType === 'telegram' ? 'Copied' : 'Copy URL'}
                             </button>
                           </div>
 
-                          {telegramPayloadMode === 'ai_teaser' && !syndication?.telegramSnippet ? (
-                            <div className="bg-black/40 border border-white/10 rounded-lg p-4 text-center space-y-2">
-                              <p className="text-xs text-gray-300">
-                                Click <strong>&quot;Generate Satellite Assets&quot;</strong> above to create a condensed AI Telegram summary, or use <strong>&quot;Direct Full LinkedIn Post + URL&quot;</strong> to send your complete post immediately.
-                              </p>
-                            </div>
-                          ) : (
-                            <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-gray-200 whitespace-pre-wrap leading-relaxed font-sans max-h-60 overflow-y-auto">
-                              {getTelegramBroadcastText()}
-                            </div>
-                          )}
+                          <div className="bg-black/40 border border-white/10 rounded-lg p-3 text-xs text-cyan-200 break-all font-mono">
+                            {getTelegramBroadcastText()}
+                          </div>
 
-                          {/* Option 1: Instant 1-Click Share to Telegram App / Web */}
+                          {/* Option 1: Instant 1-Click Share to Telegram App / Web (URL only) */}
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                             <a
-                              href={`https://t.me/share/url?url=${encodeURIComponent(
-                                publishedPostUrl.trim() || 'https://www.linkedin.com/feed/'
-                              )}&text=${encodeURIComponent(
-                                telegramPayloadMode === 'ai_teaser' && syndication?.telegramSnippet
-                                  ? getResolvedAsset(syndication.telegramSnippet)
-                                  : postBody.trim()
-                              )}`}
+                              href={`https://t.me/share/url?url=${encodeURIComponent(publishedPostUrl.trim())}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="py-2.5 px-4 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-xl flex items-center justify-center gap-2 transition-colors shadow-sm"
                             >
                               <Send className="w-3.5 h-3.5" />
-                              Share to Telegram Channel via App/Web (1-Click)
+                              Send LinkedIn URL to Telegram via App/Web (1-Click)
                             </a>
 
                             <button
@@ -2349,8 +2299,8 @@ function ContentStudioContent() {
                               >
                                 {isDispatching ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                                 {isDispatching
-                                  ? 'Broadcasting Direct Post + URL...'
-                                  : `Broadcast Post + URL to ${selectedChannelIds.length} Connected Channel${selectedChannelIds.length === 1 ? '' : 's'}`}
+                                  ? 'Broadcasting LinkedIn URL...'
+                                  : `Broadcast LinkedIn URL to ${selectedChannelIds.length} Connected Channel${selectedChannelIds.length === 1 ? '' : 's'}`}
                               </button>
 
                               {dispatchResult && (
@@ -2541,7 +2491,7 @@ function ContentStudioContent() {
                   ) : (
                     <div className="py-5 text-center border border-dashed border-white/10 rounded-xl bg-white/[0.02]">
                       <p className="text-xs text-gray-400">
-                        Once your post text is ready above, click <strong>&quot;Generate Satellite Assets&quot;</strong> to prepare your multi-channel launchpad.
+                        Paste your published <strong>LinkedIn Post URL</strong> above to unlock 1-click Telegram channel sharing &amp; multi-channel syndication.
                       </p>
                     </div>
                   )}
